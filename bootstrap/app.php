@@ -1,9 +1,15 @@
 <?php
 
+use App\Http\Middleware\CorsStrict;
+use App\Http\Middleware\ForceHttps;
+use App\Http\Middleware\LeadershipOverride;
+use App\Http\Middleware\RequireActiveCheckIn;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -14,28 +20,32 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
-            'leadership.override' => \App\Http\Middleware\LeadershipOverride::class,
-            'active.checkin' => \App\Http\Middleware\RequireActiveCheckIn::class,
-            'force.https' => \App\Http\Middleware\ForceHttps::class,
-            'cors.strict' => \App\Http\Middleware\CorsStrict::class,
+            'leadership.override' => LeadershipOverride::class,
+            'active.checkin' => RequireActiveCheckIn::class,
+            'force.https' => ForceHttps::class,
+            'cors.strict' => CorsStrict::class,
         ]);
 
         $middleware->appendToGroup('api', [
-            \App\Http\Middleware\ForceHttps::class,
-            \App\Http\Middleware\CorsStrict::class,
+            ForceHttps::class,
+            CorsStrict::class,
+        ]);
+
+        $middleware->appendToGroup('web', [
+            CorsStrict::class,
         ]);
 
         $middleware->prependToGroup('api', EnsureFrontendRequestsAreStateful::class);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        $exceptions->render(function (\Illuminate\Validation\ValidationException $e) {
+        $exceptions->render(function (ValidationException $e) {
             return response()->json([
                 'message' => $e->getMessage(),
                 'errors' => $e->errors(),
             ], $e->status);
         });
 
-        $exceptions->render(function (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        $exceptions->render(function (HttpException $e) {
             return response()->json([
                 'message' => $e->getMessage(),
             ], $e->getStatusCode());
