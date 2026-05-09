@@ -14,6 +14,18 @@ The marketing frontend repo uses `VITE_API_BASE_URL=/api/v1` in `.env.local` and
 
 Production hosts the SPA at `https://marketing.albedoedu.com` and calls this API at `https://marketingapi.albedoedu.com`. The API **must** allow that origin and treat the host as stateful for Sanctum cookies.
 
+### 419 on `POST /api/v1/auth/login` (CSRF token mismatch)
+
+Sanctum runs session + CSRF for requests from `SANCTUM_STATEFUL_DOMAINS`. The SPA must send `X-XSRF-TOKEN`, which Axios derives from the `XSRF-TOKEN` cookie. That cookie must be visible on the **marketing** origin, so session cookies need a **parent** domain:
+
+- Set **`SESSION_DOMAIN=.albedoedu.com`** (leading dot). Without this, cookies are host-only on `marketingapi.albedoedu.com` and the browser will not expose them to JavaScript on `marketing.albedoedu.com`, which produces **419** on stateful POSTs.
+
+Also set on HTTPS production:
+
+- `SESSION_SECURE_COOKIE=true`
+
+`POST /api/v1/auth/login` and `POST /api/v1/auth/logout` are excluded from CSRF in this app because they use bearer tokens; other stateful writes still require a valid CSRF token and the shared session cookie above.
+
 ## Required production env values
 
 On **marketingapi** (Hostinger or your API host), set at least:
@@ -25,6 +37,7 @@ On **marketingapi** (Hostinger or your API host), set at least:
 - `DB_USERNAME=u262074081_albedo_market`
 - `DB_PASSWORD=<set on server>`
 - `SESSION_DOMAIN=.albedoedu.com`
+- `SESSION_SECURE_COOKIE=true`
 - `CORS_ALLOWED_ORIGINS=https://marketing.albedoedu.com,https://albedoedu.com,https://www.albedoedu.com`
 - `SANCTUM_STATEFUL_DOMAINS=marketing.albedoedu.com,albedoedu.com,www.albedoedu.com`
 
