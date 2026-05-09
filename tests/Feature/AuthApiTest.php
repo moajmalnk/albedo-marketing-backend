@@ -26,4 +26,26 @@ class AuthApiTest extends TestCase
         $response = $this->postJson('/api/v1/auth/login', ['email' => 'admin@test.com', 'password' => 'password']);
         $response->assertOk()->assertJsonStructure(['token', 'user']);
     }
+
+    public function test_login_succeeds_without_xsrf_when_request_is_stateful_spa_origin(): void
+    {
+        config(['sanctum.stateful' => ['marketing.albedoedu.com']]);
+
+        $role = Role::query()->create(['key' => 'admin', 'name' => 'Admin', 'permission_level' => 90]);
+        User::query()->create([
+            'first_name' => 'Admin',
+            'email' => 'spa@test.com',
+            'password_hash' => Hash::make('secret'),
+            'role_id' => $role->id,
+            'status' => 'active',
+        ]);
+
+        $response = $this->postJson(
+            '/api/v1/auth/login',
+            ['email' => 'spa@test.com', 'password' => 'secret'],
+            ['Origin' => 'https://marketing.albedoedu.com']
+        );
+
+        $response->assertOk()->assertJsonStructure(['token', 'user']);
+    }
 }

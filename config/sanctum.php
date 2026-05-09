@@ -1,7 +1,7 @@
 <?php
 
-use Illuminate\Cookie\Middleware\EncryptCookies;
 use App\Http\Middleware\ValidateCsrfToken;
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Laravel\Sanctum\Http\Middleware\AuthenticateSession;
 use Laravel\Sanctum\Sanctum;
 
