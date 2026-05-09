@@ -87,24 +87,10 @@ $run('migrate --force', function () use ($kernel): void {
     }
 });
 
-$run('db:seed --class=RoleSeeder --force', function () use ($kernel): void {
-    $exit = $kernel->call('db:seed', ['--class' => 'RoleSeeder', '--force' => true]);
+$run('db:seed --force', function () use ($kernel): void {
+    $exit = $kernel->call('db:seed', ['--force' => true]);
     if ($exit !== 0) {
-        throw new RuntimeException('RoleSeeder returned non-zero status');
-    }
-});
-
-$run('db:seed --class=LeadStageSeeder --force', function () use ($kernel): void {
-    $exit = $kernel->call('db:seed', ['--class' => 'LeadStageSeeder', '--force' => true]);
-    if ($exit !== 0) {
-        throw new RuntimeException('LeadStageSeeder returned non-zero status');
-    }
-});
-
-$run('db:seed --class=UserSeeder --force', function () use ($kernel): void {
-    $exit = $kernel->call('db:seed', ['--class' => 'UserSeeder', '--force' => true]);
-    if ($exit !== 0) {
-        throw new RuntimeException('UserSeeder returned non-zero status');
+        throw new RuntimeException('db:seed returned non-zero status');
     }
 });
 
