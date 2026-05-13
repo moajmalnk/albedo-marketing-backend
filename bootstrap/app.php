@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'active.checkin' => RequireActiveCheckIn::class,
             'force.https' => ForceHttps::class,
             'cors.strict' => CorsStrict::class,
+            'whatsapp.worker' => \App\Http\Middleware\WhatsAppWorkerToken::class,
         ]);
 
         $middleware->appendToGroup('api', [

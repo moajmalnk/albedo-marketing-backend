@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'whatsapp_worker' => [
+        'token' => env('WHATSAPP_WORKER_TOKEN', ''),
+        'internal_url' => env('WHATSAPP_WORKER_INTERNAL_URL', 'http://127.0.0.1:5301'),
+    ],
+
 ];

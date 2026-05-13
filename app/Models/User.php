@@ -6,6 +6,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -27,8 +28,12 @@ class User extends Authenticatable
         'email',
         'password_hash',
         'phone',
+        'whatsapp',
         'role_id',
         'department',
+        'sub_brand',
+        'address',
+        'notes',
         'reporting_manager_id',
         'status',
         'phone_extension',
@@ -75,5 +80,25 @@ class User extends Authenticatable
     public function leads(): HasMany
     {
         return $this->hasMany(Lead::class, 'owner_id');
+    }
+
+    public function defaultWhatsAppSession(): HasOne
+    {
+        return $this->hasOne(WhatsAppSession::class)->where('session_name', 'default');
+    }
+
+    public function whatsAppSessions(): HasMany
+    {
+        return $this->hasMany(WhatsAppSession::class);
+    }
+
+    /**
+     * Leads captured via WhatsApp worker for this user today (by captured_by_user_id).
+     */
+    public function whatsAppCapturedLeadsToday(): HasMany
+    {
+        return $this->hasMany(Lead::class, 'captured_by_user_id')
+            ->where('source_code', 'whatsapp')
+            ->whereDate('created_at', now()->toDateString());
     }
 }

@@ -3,9 +3,14 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\AttendanceLog;
+use App\Models\AuditLog;
+use App\Models\LeadActivity;
 use App\Models\Role;
 use App\Models\User;
+use App\Models\WhatsAppSession;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
@@ -19,6 +24,20 @@ class UserController extends Controller
         if (! in_array($roleKey, ['super_admin', 'admin', 'dept_head'], true)) {
             abort(403, 'You are not authorized to manage users.');
         }
+    }
+
+    private function audit(Request $request, string $action, User $target, ?array $old = null, ?array $new = null): void
+    {
+        AuditLog::query()->create([
+            'actor_id' => $request->user()?->id,
+            'action' => $action,
+            'entity_type' => 'user',
+            'entity_id' => $target->id,
+            'old_values' => $old,
+            'new_values' => $new,
+            'ip' => $request->ip(),
+            'user_agent' => substr((string) $request->header('User-Agent'), 0, 255) ?: null,
+        ]);
     }
 
     public function index(Request $request)
@@ -50,6 +69,13 @@ class UserController extends Controller
         return response()->json($users);
     }
 
+    public function show(Request $request, User $user)
+    {
+        $this->ensureCanManageUsers($request);
+
+        return response()->json($user->load(['role', 'manager:id,first_name,last_name']));
+    }
+
     public function store(Request $request)
     {
         $this->ensureCanManageUsers($request);
@@ -59,8 +85,12 @@ class UserController extends Controller
             'last_name' => ['nullable', 'string', 'max:80'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'phone' => ['nullable', 'string', 'max:20'],
+            'whatsapp' => ['nullable', 'string', 'max:20'],
             'role_key' => ['required', 'string', 'exists:roles,key'],
             'department' => ['nullable', Rule::in(['PM', 'IM', 'SALES', 'OPS'])],
+            'sub_brand' => ['nullable', 'string', 'max:80'],
+            'address' => ['nullable', 'string'],
+            'notes' => ['nullable', 'string'],
             'reporting_manager_id' => ['nullable', 'integer', 'exists:users,id'],
             'password' => ['required', 'string', 'min:8'],
         ]);
@@ -75,12 +105,18 @@ class UserController extends Controller
             'last_name' => $data['last_name'] ?? null,
             'email' => strtolower($data['email']),
             'phone' => $data['phone'] ?? null,
+            'whatsapp' => $data['whatsapp'] ?? null,
             'role_id' => $roleId,
             'department' => $data['department'] ?? null,
+            'sub_brand' => $data['sub_brand'] ?? null,
+            'address' => $data['address'] ?? null,
+            'notes' => $data['notes'] ?? null,
             'reporting_manager_id' => $data['reporting_manager_id'] ?? null,
             'status' => 'active',
             'password_hash' => Hash::make($data['password']),
         ]);
+
+        $this->audit($request, 'user.create', $user, null, $user->only(['email', 'role_id', 'department']));
 
         return response()->json($user->load(['role', 'manager:id,first_name,last_name']), 201);
     }
@@ -94,8 +130,12 @@ class UserController extends Controller
             'last_name' => ['nullable', 'string', 'max:80'],
             'email' => ['sometimes', 'required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'phone' => ['nullable', 'string', 'max:20'],
+            'whatsapp' => ['nullable', 'string', 'max:20'],
             'role_key' => ['nullable', 'string', 'exists:roles,key'],
             'department' => ['nullable', Rule::in(['PM', 'IM', 'SALES', 'OPS'])],
+            'sub_brand' => ['nullable', 'string', 'max:80'],
+            'address' => ['nullable', 'string'],
+            'notes' => ['nullable', 'string'],
             'reporting_manager_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
@@ -117,7 +157,9 @@ class UserController extends Controller
             $data['email'] = strtolower((string) $data['email']);
         }
 
+        $before = $user->only(array_keys($data));
         $user->update($data);
+        $this->audit($request, 'user.update', $user, $before, $user->only(array_keys($data)));
 
         return response()->json($user->fresh()->load(['role', 'manager:id,first_name,last_name']));
     }
@@ -128,12 +170,20 @@ class UserController extends Controller
 
         $data = $request->validate([
             'status' => ['required', Rule::in(['active', 'inactive'])],
+            'reason' => ['nullable', 'string', 'max:255'],
         ]);
 
+        $before = ['status' => $user->status];
         $user->update(['status' => $data['status']]);
+
         if ($data['status'] === 'inactive') {
             $user->tokens()->delete();
         }
+
+        $this->audit($request, 'user.status_change', $user, $before, [
+            'status' => $data['status'],
+            'reason' => $data['reason'] ?? null,
+        ]);
 
         return response()->json($user->fresh()->load(['role', 'manager:id,first_name,last_name']));
     }
@@ -149,6 +199,8 @@ class UserController extends Controller
         $user->update(['password_hash' => Hash::make($data['password'])]);
         $user->tokens()->delete();
 
+        $this->audit($request, 'user.password_reset', $user);
+
         return response()->json(['message' => 'Password updated']);
     }
 
@@ -160,9 +212,100 @@ class UserController extends Controller
 
         $this->ensureCanManageUsers($request);
 
+        $reason = (string) $request->input('reason', '');
+
         $user->tokens()->delete();
         $user->delete();
 
+        $this->audit($request, 'user.delete', $user, null, ['reason' => $reason ?: null]);
+
         return response()->json(['message' => 'User deleted']);
+    }
+
+    public function stats(Request $request, User $user)
+    {
+        $this->ensureCanManageUsers($request);
+
+        $today = now()->toDateString();
+
+        $leadsTotal = DB::table('leads')->where('owner_id', $user->id)->whereNull('deleted_at')->count();
+        $leadsActive = DB::table('leads')
+            ->where('owner_id', $user->id)
+            ->whereNull('deleted_at')
+            ->where(function ($q) {
+                $q->whereNull('status')->orWhereNotIn('status', ['Enrolled', 'Disqualified']);
+            })
+            ->count();
+        $waLeadsToday = DB::table('leads')
+            ->where('captured_by_user_id', $user->id)
+            ->where('source_code', 'whatsapp')
+            ->whereDate('created_at', $today)
+            ->count();
+        $activitiesLast7 = LeadActivity::query()
+            ->where('user_id', $user->id)
+            ->where('occurred_at', '>=', now()->subDays(7))
+            ->count();
+        $lastAttendance = AttendanceLog::query()
+            ->where('user_id', $user->id)
+            ->orderByDesc('check_in_at')
+            ->value('check_in_at');
+
+        $waSession = WhatsAppSession::query()
+            ->where('user_id', $user->id)
+            ->where('session_name', 'default')
+            ->first(['status', 'phone_number', 'last_sync']);
+
+        return response()->json([
+            'leads_owned_total' => $leadsTotal,
+            'leads_owned_active' => $leadsActive,
+            'whatsapp_leads_today' => $waLeadsToday,
+            'activities_last_7d' => $activitiesLast7,
+            'last_attendance_at' => $lastAttendance,
+            'whatsapp_session' => $waSession,
+        ]);
+    }
+
+    public function activities(Request $request, User $user)
+    {
+        $this->ensureCanManageUsers($request);
+
+        $limit = (int) $request->input('limit', 25);
+        $limit = max(1, min(100, $limit));
+
+        $rows = LeadActivity::query()
+            ->where('user_id', $user->id)
+            ->orderByDesc('occurred_at')
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get();
+
+        return response()->json(['data' => $rows]);
+    }
+
+    public function me(Request $request)
+    {
+        $user = $request->user()?->load(['role', 'manager:id,first_name,last_name']);
+
+        return response()->json($user);
+    }
+
+    public function updateMe(Request $request)
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        $data = $request->validate([
+            'first_name' => ['sometimes', 'required', 'string', 'max:80'],
+            'last_name' => ['nullable', 'string', 'max:80'],
+            'phone' => ['nullable', 'string', 'max:20'],
+            'whatsapp' => ['nullable', 'string', 'max:20'],
+            'address' => ['nullable', 'string'],
+        ]);
+
+        $user->update($data);
+
+        return response()->json($user->fresh()->load(['role', 'manager:id,first_name,last_name']));
     }
 }

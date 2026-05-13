@@ -17,7 +17,26 @@ class LeadController extends Controller
         if ($request->filled('stage')) {
             $query->whereHas('stage', fn ($q) => $q->where('key', $request->string('stage')));
         }
-        return response()->json($query->latest()->paginate(20));
+        if ($request->filled('source_code')) {
+            $query->where('source_code', $request->string('source_code'));
+        }
+        if ($request->filled('owner_id')) {
+            $query->where('owner_id', (int) $request->input('owner_id'));
+        }
+
+        $sort = (string) $request->input('sort', '-created_at');
+        if ($sort === '-created_at') {
+            $query->orderByDesc('created_at')->orderByDesc('id');
+        } elseif ($sort === 'created_at') {
+            $query->orderBy('created_at')->orderBy('id');
+        } else {
+            $query->latest('id');
+        }
+
+        $perPage = (int) $request->input('limit', 20);
+        $perPage = max(1, min(50, $perPage));
+
+        return response()->json($query->paginate($perPage));
     }
 
     public function store(Request $request, LeadService $leadService)
