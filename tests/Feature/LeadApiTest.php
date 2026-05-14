@@ -101,7 +101,7 @@ class LeadApiTest extends TestCase
         $response->assertCreated()
             ->assertJsonPath('student_name', 'Extended Lead')
             ->assertJsonPath('phone', '919122233344')
-            ->assertJsonPath('alternate_phone', '919144555566')
+            ->assertJsonPath('alternate_phone', '919144455566')
             ->assertJsonPath('connected_by', 'INBOUND_CALL')
             ->assertJsonPath('children_count', 2)
             ->assertJsonPath('generated_by_user_id', $user->id);
