@@ -29,7 +29,7 @@ class LeadApiTest extends TestCase
 
     public function test_lead_creation_returns_conflict_for_duplicate_phone(): void
     {
-        $stage = LeadStage::query()->create(['key' => 'new_lead', 'label' => 'New Lead']);
+        $stage = LeadStage::query()->where('key', 'new_lead')->firstOrFail();
         $user = $this->makeUser();
         Lead::query()->create(['student_name' => 'A', 'phone' => '919999999999', 'stage_id' => $stage->id]);
 
@@ -40,8 +40,8 @@ class LeadApiTest extends TestCase
 
     public function test_stage_change_creates_transition_record(): void
     {
-        $new = LeadStage::query()->create(['key' => 'new_lead', 'label' => 'New Lead', 'order' => 1]);
-        $prospect = LeadStage::query()->create(['key' => 'prospect', 'label' => 'Prospect', 'order' => 2]);
+        $new = LeadStage::query()->where('key', 'new_lead')->firstOrFail();
+        $prospect = LeadStage::query()->where('key', 'prospect')->firstOrFail();
         $user = $this->makeUser();
         $lead = Lead::query()->create(['student_name' => 'A', 'phone' => '918888888888', 'stage_id' => $new->id]);
 

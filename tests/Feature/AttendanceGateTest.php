@@ -24,7 +24,7 @@ class AttendanceGateTest extends TestCase
             'role_id' => $role->id,
             'status' => 'active',
         ]);
-        LeadStage::query()->create(['key' => 'new_lead', 'label' => 'New']);
+        LeadStage::query()->where('key', 'new_lead')->firstOrFail();
 
         Sanctum::actingAs($user);
         $response = $this->getJson('/api/v1/leads');

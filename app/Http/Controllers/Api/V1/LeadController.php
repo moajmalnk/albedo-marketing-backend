@@ -71,8 +71,24 @@ class LeadController extends Controller
     public function changeStage(Request $request, Lead $lead)
     {
         $data = $request->validate(['stage_key' => ['required', 'string'], 'reason' => ['nullable', 'string']]);
-        $targetStage = LeadStage::query()->where('key', $data['stage_key'])->firstOrFail();
-        $linear = ['new_lead', 'prospect', 'assessment_booked', 'itb', 'enrolled'];
+        $targetStage = LeadStage::query()->where('key', $data['stage_key'])->first();
+        if (! $targetStage) {
+            return response()->json([
+                'message' => 'Unknown stage_key',
+                'stage_key' => $data['stage_key'],
+            ], 422);
+        }
+        $linear = [
+            'new_lead',
+            'prospect',
+            'demo_required',
+            'itb',
+            'follow_up',
+            'dnp',
+            'assessment_booked',
+            'assessment_done',
+            'enrolled',
+        ];
         $currentKey = $lead->stage?->key;
         if ($currentKey && in_array($currentKey, $linear, true)) {
             $currentIndex = array_search($currentKey, $linear, true);
