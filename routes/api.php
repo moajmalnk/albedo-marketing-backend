@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\MarketingChallengeController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\TaskController;
+use App\Http\Controllers\Api\V1\TeamTipController;
 use App\Http\Controllers\Api\V1\TelephonyWebhookController;
 use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Controllers\Api\V1\WhatsAppSessionController;
@@ -60,6 +61,8 @@ Route::prefix('v1')->group(function (): void {
         Route::delete('/challenge-categories/{challenge_category}', [ChallengeCategoryController::class, 'destroy']);
 
         Route::apiResource('marketing-challenges', MarketingChallengeController::class);
+
+        Route::apiResource('team-tips', TeamTipController::class);
 
         Route::get('/users', [UserController::class, 'index']);
         Route::post('/users', [UserController::class, 'store']);

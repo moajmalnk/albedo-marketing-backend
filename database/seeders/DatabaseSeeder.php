@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
             UserSeeder::class,
             ChallengeCategorySeeder::class,
             MarketingChallengeSeeder::class,
+            TeamTipSeeder::class,
         ]);
     }
 }
