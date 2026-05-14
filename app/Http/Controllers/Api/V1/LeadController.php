@@ -9,6 +9,7 @@ use App\Models\LeadStageTransition;
 use App\Services\LeadService;
 use Database\Seeders\LeadStageSeeder;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class LeadController extends Controller
 {
@@ -42,9 +43,44 @@ class LeadController extends Controller
 
     public function store(Request $request, LeadService $leadService)
     {
-        $data = $request->validate(['student_name' => ['required', 'string'], 'phone' => ['required', 'string']]);
+        $data = $request->validate([
+            'student_name' => ['required', 'string', 'max:160'],
+            'phone' => ['required', 'string', 'max:20'],
+            'whatsapp' => ['nullable', 'string', 'max:20'],
+            'email' => ['nullable', 'string', 'email', 'max:160'],
+            'parent_name' => ['nullable', 'string', 'max:160'],
+            'parent_relation' => ['nullable', 'string', Rule::in(['father', 'mother', 'guardian'])],
+            'class' => ['nullable', 'string', 'max:20'],
+            'syllabus' => ['nullable', 'string', Rule::in(['STATE', 'CBSE', 'ICSE', 'IGCSE', 'IB'])],
+            'course' => ['nullable', 'string', Rule::in(['Foundation', 'Academics', 'Crash', 'Repeater', 'Other'])],
+            'subjects' => ['nullable', 'array'],
+            'subjects.*' => ['string', 'max:120'],
+            'school' => ['nullable', 'string', 'max:160'],
+            'city' => ['nullable', 'string', 'max:80'],
+            'district' => ['nullable', 'string', 'max:80'],
+            'state' => ['nullable', 'string', 'max:80'],
+            'country' => ['nullable', 'string', 'max:80'],
+            'pincode' => ['nullable', 'string', 'max:12'],
+            'source_group' => ['nullable', 'string', Rule::in(['influence', 'performance', 'albedo', 'reference', 'other'])],
+            'source_code' => ['nullable', 'string', 'max:40'],
+            'campaign' => ['nullable', 'string', 'max:120'],
+            'status' => ['nullable', 'string', 'max:40'],
+            'owner_id' => ['nullable', 'integer'],
+            'assigned_dept' => ['nullable', 'string', Rule::in(['SALES', 'MARKETING'])],
+            'priority' => ['nullable', 'string', Rule::in(['low', 'normal', 'high'])],
+            'dnd' => ['nullable', 'boolean'],
+            'next_action_at' => ['nullable', 'date'],
+        ]);
+
+        foreach ($data as $key => $value) {
+            if ($value === '' && ! in_array($key, ['student_name', 'phone'], true)) {
+                unset($data[$key]);
+            }
+        }
+
         $data['created_by'] = $request->user()?->id;
         $data['stage_id'] = LeadStage::query()->where('key', 'new_lead')->value('id');
+
         return response()->json($leadService->createLead($data), 201);
     }
 
