@@ -187,8 +187,11 @@ class LeadController extends Controller
             'assessment_done',
             'enrolled',
         ];
+        $request->user()?->loadMissing('role');
+        $roleKey = $request->user()?->role?->key;
+        $canOverrideLinearProgression = $roleKey && in_array($roleKey, ['super_admin', 'admin', 'dept_head'], true);
         $currentKey = $lead->stage?->key;
-        if ($currentKey && in_array($currentKey, $linear, true)) {
+        if (! $canOverrideLinearProgression && $currentKey && in_array($currentKey, $linear, true)) {
             $currentIndex = array_search($currentKey, $linear, true);
             $targetIndex = array_search($targetStage->key, $linear, true);
             if ($targetIndex !== false && $targetIndex > $currentIndex + 1) {

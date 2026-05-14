@@ -52,6 +52,30 @@ class LeadApiTest extends TestCase
         $this->assertDatabaseHas('lead_stage_transitions', ['lead_id' => $lead->id, 'to_stage_id' => $prospect->id]);
     }
 
+    public function test_admin_can_jump_multiple_linear_stages(): void
+    {
+        $new = LeadStage::query()->where('key', 'new_lead')->firstOrFail();
+        $enrolled = LeadStage::query()->where('key', 'enrolled')->firstOrFail();
+        $user = $this->makeUser('admin');
+        $lead = Lead::query()->create(['student_name' => 'Jump', 'phone' => '917777777777', 'stage_id' => $new->id]);
+
+        Sanctum::actingAs($user);
+        $response = $this->patchJson("/api/v1/leads/{$lead->id}/stage", ['stage_key' => 'enrolled']);
+        $response->assertOk()->assertJsonPath('lead.stage_id', $enrolled->id);
+    }
+
+    public function test_marketer_cannot_skip_linear_stages(): void
+    {
+        $new = LeadStage::query()->where('key', 'new_lead')->firstOrFail();
+        $user = $this->makeUser('marketer');
+        $lead = Lead::query()->create(['student_name' => 'NoSkip', 'phone' => '916666666666', 'stage_id' => $new->id]);
+
+        Sanctum::actingAs($user);
+        $response = $this->patchJson("/api/v1/leads/{$lead->id}/stage", ['stage_key' => 'enrolled']);
+        $response->assertStatus(422)->assertJsonPath('message', 'Invalid stage progression');
+        $this->assertSame($new->id, $lead->fresh()->stage_id);
+    }
+
     public function test_lead_form_options_returns_grouped_shape(): void
     {
         $this->seed(LeadFormOptionSeeder::class);
