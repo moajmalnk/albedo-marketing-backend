@@ -14,4 +14,6 @@ class LeadActivity extends Model
     }
 
     public function lead(): BelongsTo { return $this->belongsTo(Lead::class); }
+
+    public function user(): BelongsTo { return $this->belongsTo(User::class, 'user_id'); }
 }

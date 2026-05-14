@@ -268,4 +268,40 @@ class LeadApiTest extends TestCase
         $this->assertNotNull($lead);
         $this->assertNull($lead->student_name);
     }
+
+    public function test_lead_history_returns_audit_and_activity_timeline(): void
+    {
+        $new = LeadStage::query()->where('key', 'new_lead')->firstOrFail();
+        $prospect = LeadStage::query()->where('key', 'prospect')->firstOrFail();
+        $user = $this->makeUser();
+        $lead = Lead::query()->create(['student_name' => 'History Lead', 'phone' => '919000000001', 'stage_id' => $new->id]);
+
+        Sanctum::actingAs($user);
+        $this->patchJson("/api/v1/leads/{$lead->id}/stage", ['stage_key' => 'prospect'])->assertOk();
+
+        $this->postJson("/api/v1/leads/{$lead->id}/activities", [
+            'type' => 'note',
+            'comments' => 'CRM note for history',
+        ])->assertCreated();
+
+        $res = $this->getJson("/api/v1/leads/{$lead->id}/history");
+        $res->assertOk()
+            ->assertJsonPath('lead_id', $lead->id);
+
+        $items = $res->json('items');
+        $this->assertIsArray($items);
+        $this->assertNotEmpty($items);
+
+        $kinds = collect($items)->pluck('kind')->all();
+        $this->assertContains('audit', $kinds);
+        $this->assertContains('activity', $kinds);
+
+        $stageRow = collect($items)->first(fn (array $i) => ($i['action'] ?? '') === 'lead.stage_change');
+        $this->assertIsArray($stageRow);
+        $this->assertStringContainsString('→', (string) ($stageRow['description'] ?? ''));
+
+        $noteRow = collect($items)->first(fn (array $i) => ($i['kind'] ?? '') === 'activity' && ($i['activity_type'] ?? '') === 'note');
+        $this->assertIsArray($noteRow);
+        $this->assertSame($user->id, $noteRow['actor']['id'] ?? null);
+    }
 }

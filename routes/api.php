@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\FinanceController;
 use App\Http\Controllers\Api\V1\LeadActivityController;
 use App\Http\Controllers\Api\V1\LeadController;
 use App\Http\Controllers\Api\V1\LeadFormOptionController;
+use App\Http\Controllers\Api\V1\LeadHistoryController;
 use App\Http\Controllers\Api\V1\LeadImportController;
 use App\Http\Controllers\Api\V1\MarketingChallengeController;
 use App\Http\Controllers\Api\V1\PaymentController;
@@ -97,6 +98,7 @@ Route::prefix('v1')->group(function (): void {
 
                 Route::get('/leads/{lead}/activities', [LeadActivityController::class, 'index']);
                 Route::post('/leads/{lead}/activities', [LeadActivityController::class, 'store']);
+                Route::get('/leads/{lead}/history', [LeadHistoryController::class, 'index']);
 
                 Route::get('/tasks', [TaskController::class, 'index']);
                 Route::post('/tasks', [TaskController::class, 'store']);
