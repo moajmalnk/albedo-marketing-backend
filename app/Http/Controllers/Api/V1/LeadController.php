@@ -46,8 +46,11 @@ class LeadController extends Controller
         $data = $request->validate([
             'student_name' => ['required', 'string', 'max:160'],
             'phone' => ['required', 'string', 'max:20'],
+            'alternate_phone' => ['nullable', 'string', 'max:20'],
             'whatsapp' => ['nullable', 'string', 'max:20'],
             'email' => ['nullable', 'string', 'email', 'max:160'],
+            'children_count' => ['nullable', 'integer', 'min:0', 'max:30'],
+            'already_enrolled' => ['nullable', 'boolean'],
             'parent_name' => ['nullable', 'string', 'max:160'],
             'parent_relation' => ['nullable', 'string', Rule::in(['father', 'mother', 'guardian'])],
             'class' => ['nullable', 'string', 'max:20'],
@@ -64,8 +67,12 @@ class LeadController extends Controller
             'source_group' => ['nullable', 'string', Rule::in(['influence', 'performance', 'albedo', 'reference', 'other'])],
             'source_code' => ['nullable', 'string', 'max:40'],
             'campaign' => ['nullable', 'string', 'max:120'],
+            'connected_by' => ['nullable', 'string', 'max:64'],
+            'enquiry_at' => ['nullable', 'date'],
+            'notes_html' => ['nullable', 'string', 'max:20000'],
             'status' => ['nullable', 'string', 'max:40'],
             'owner_id' => ['nullable', 'integer'],
+            'generated_by_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'assigned_dept' => ['nullable', 'string', Rule::in(['SALES', 'MARKETING'])],
             'priority' => ['nullable', 'string', Rule::in(['low', 'normal', 'high'])],
             'dnd' => ['nullable', 'boolean'],
@@ -78,15 +85,23 @@ class LeadController extends Controller
             }
         }
 
+        if (! empty($data['notes_html'])) {
+            $data['notes_html'] = strip_tags(
+                (string) $data['notes_html'],
+                '<p><br><b><strong><i><em><u><ul><ol><li><a><span><div>'
+            );
+        }
+
         $data['created_by'] = $request->user()?->id;
+        $data['generated_by_user_id'] = $data['generated_by_user_id'] ?? $request->user()?->id;
         $data['stage_id'] = LeadStage::query()->where('key', 'new_lead')->value('id');
 
-        return response()->json($leadService->createLead($data), 201);
+        return response()->json($leadService->createLead($data)->load(['stage', 'owner', 'generatedBy:id,first_name,last_name,email']), 201);
     }
 
     public function show(Lead $lead)
     {
-        return response()->json($lead->load(['stage', 'owner', 'activities']));
+        return response()->json($lead->load(['stage', 'owner', 'activities', 'generatedBy:id,first_name,last_name,email']));
     }
 
     public function update(Request $request, Lead $lead)

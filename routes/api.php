@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\ExpenseController;
 use App\Http\Controllers\Api\V1\FinanceController;
 use App\Http\Controllers\Api\V1\LeadActivityController;
 use App\Http\Controllers\Api\V1\LeadController;
+use App\Http\Controllers\Api\V1\LeadFormOptionController;
 use App\Http\Controllers\Api\V1\LeadImportController;
 use App\Http\Controllers\Api\V1\MarketingChallengeController;
 use App\Http\Controllers\Api\V1\PaymentController;
@@ -64,6 +65,7 @@ Route::prefix('v1')->group(function (): void {
 
         Route::apiResource('team-tips', TeamTipController::class);
 
+        Route::get('/users/for-lead-form', [UserController::class, 'forLeadForm']);
         Route::get('/users', [UserController::class, 'index']);
         Route::post('/users', [UserController::class, 'store']);
         Route::get('/users/{user}', [UserController::class, 'show']);
@@ -80,6 +82,11 @@ Route::prefix('v1')->group(function (): void {
 
         Route::middleware('leadership.override')->group(function (): void {
             Route::middleware('active.checkin')->group(function (): void {
+                Route::get('/lead-form-options', [LeadFormOptionController::class, 'index']);
+                Route::post('/lead-form-options', [LeadFormOptionController::class, 'store']);
+                Route::patch('/lead-form-options/{lead_form_option}', [LeadFormOptionController::class, 'update']);
+                Route::delete('/lead-form-options/{lead_form_option}', [LeadFormOptionController::class, 'destroy']);
+
                 Route::get('/leads', [LeadController::class, 'index']);
                 Route::post('/leads', [LeadController::class, 'store']);
                 Route::get('/leads/{lead}', [LeadController::class, 'show']);

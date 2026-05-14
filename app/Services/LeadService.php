@@ -11,6 +11,12 @@ class LeadService
     public function createLead(array $payload): Lead
     {
         $payload['phone'] = PhoneNormalizer::normalize($payload['phone'] ?? '');
+        if (! empty($payload['alternate_phone'])) {
+            $payload['alternate_phone'] = PhoneNormalizer::normalize((string) $payload['alternate_phone']);
+        }
+        if (! empty($payload['whatsapp'])) {
+            $payload['whatsapp'] = PhoneNormalizer::normalize((string) $payload['whatsapp']);
+        }
 
         $existing = Lead::query()->with(['owner', 'stage'])->where('phone', $payload['phone'])->first();
         if ($existing) {
