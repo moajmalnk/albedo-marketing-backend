@@ -14,7 +14,7 @@ class ChallengeCategoryController extends Controller
         $actor = $request->user()?->loadMissing('role');
         $roleKey = $actor?->role?->key;
 
-        if (! in_array($roleKey, ['super_admin', 'admin'], true)) {
+        if (! in_array($roleKey, ['super_admin', 'admin', 'dept_head'], true)) {
             abort(403, 'You are not authorized to manage challenge categories.');
         }
     }

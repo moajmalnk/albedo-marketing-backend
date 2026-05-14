@@ -15,7 +15,7 @@ class LeadFormOptionController extends Controller
         $actor = $request->user()?->loadMissing('role');
         $roleKey = $actor?->role?->key;
 
-        if (! in_array($roleKey, ['super_admin', 'admin'], true)) {
+        if (! in_array($roleKey, ['super_admin', 'admin', 'dept_head'], true)) {
             abort(403, 'You are not authorized to manage lead form options.');
         }
     }
@@ -25,7 +25,7 @@ class LeadFormOptionController extends Controller
      *
      * Default: **active options only** (for Add Lead and similar capture UIs).
      * When `include_inactive=1` is passed, returns all options per group (including inactive)
-     * for Settings CRUD — requires the same role as mutating routes (`super_admin` / `admin`).
+     * for Settings CRUD — requires the same role as mutating routes (`super_admin`, `admin`, `dept_head`).
      *
      * @return \Illuminate\Http\JsonResponse<string, array<int, array{id:int,value:string,label:string,sort_order:int,is_active?:bool,meta?:array|null}>>
      */

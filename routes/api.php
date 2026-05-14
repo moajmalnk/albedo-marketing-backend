@@ -111,6 +111,8 @@ Route::prefix('v1')->group(function (): void {
         });
 
         Route::get('/analytics/productivity', [AnalyticsController::class, 'productivity']);
+        Route::get('/analytics/marketing', [AnalyticsController::class, 'marketing']);
+        Route::get('/analytics/role-summary', [AnalyticsController::class, 'roleSummary']);
 
         Route::apiResource('enrollments', EnrollmentController::class);
         Route::get('/enrollments/{enrollment}/payments', [PaymentController::class, 'index']);

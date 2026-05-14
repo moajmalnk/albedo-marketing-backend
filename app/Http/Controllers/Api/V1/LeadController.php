@@ -7,8 +7,10 @@ use App\Models\Lead;
 use App\Models\LeadStage;
 use App\Models\LeadStageTransition;
 use App\Services\LeadService;
+use App\Support\LeadChannelClassifier;
 use App\Support\LeadFormPicklist;
 use Database\Seeders\LeadStageSeeder;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -44,6 +46,19 @@ class LeadController extends Controller
 
     public function index(Request $request)
     {
+        $request->validate([
+            'created_from' => ['nullable', 'date'],
+            'created_to' => ['nullable', 'date'],
+            'assigned_dept' => ['nullable', 'string', Rule::in(['SALES', 'MARKETING'])],
+            'country' => ['nullable', 'string', 'max:80'],
+            'created_by' => ['nullable', 'integer'],
+            'generated_by_user_id' => ['nullable', 'integer'],
+            'status_filter' => ['nullable', 'string', Rule::in(['All', 'Qualified', 'Follow-up', 'Not Interested', 'Fraud'])],
+            'tab' => ['nullable', 'string', Rule::in(['All', 'WhatsApp', 'Form', 'Call', 'Message'])],
+            'month' => ['nullable', 'string'],
+            'year' => ['nullable', 'string'],
+        ]);
+
         $query = Lead::query()->with(['stage', 'owner']);
         if ($request->filled('stage')) {
             $query->whereHas('stage', fn ($q) => $q->where('key', $request->string('stage')));
@@ -53,6 +68,46 @@ class LeadController extends Controller
         }
         if ($request->filled('owner_id')) {
             $query->where('owner_id', (int) $request->input('owner_id'));
+        }
+        if ($request->filled('created_from')) {
+            $query->whereDate('created_at', '>=', $request->date('created_from')->toDateString());
+        }
+        if ($request->filled('created_to')) {
+            $query->whereDate('created_at', '<=', $request->date('created_to')->toDateString());
+        }
+        if ($request->filled('assigned_dept')) {
+            $query->where('assigned_dept', $request->string('assigned_dept'));
+        }
+        if ($request->filled('country')) {
+            $query->where('country', $request->string('country'));
+        }
+        if ($request->filled('created_by')) {
+            $query->where('created_by', (int) $request->input('created_by'));
+        }
+        if ($request->filled('generated_by_user_id')) {
+            $query->where('generated_by_user_id', (int) $request->input('generated_by_user_id'));
+        }
+        $statusFilter = $request->input('status_filter', 'All');
+        if ($statusFilter !== 'All' && is_string($statusFilter)) {
+            $this->applyLeadStatusFilter($query, $statusFilter);
+        }
+        $tab = $request->input('tab', 'All');
+        if (in_array($tab, ['WhatsApp', 'Form', 'Call', 'Message'], true)) {
+            LeadChannelClassifier::applyChannelFilter($query, $tab);
+        }
+        $month = $request->input('month');
+        if ($month !== null && $month !== '' && $month !== 'All') {
+            $m = (int) $month;
+            if ($m >= 1 && $m <= 12) {
+                $query->whereMonth('created_at', $m);
+            }
+        }
+        $year = $request->input('year');
+        if ($year !== null && $year !== '' && $year !== 'All') {
+            $y = (int) $year;
+            if ($y >= 2000 && $y <= 2100) {
+                $query->whereYear('created_at', $y);
+            }
         }
 
         $sort = (string) $request->input('sort', '-created_at');
@@ -65,9 +120,24 @@ class LeadController extends Controller
         }
 
         $perPage = (int) $request->input('limit', 20);
-        $perPage = max(1, min(50, $perPage));
+        $perPage = max(1, min(100, $perPage));
 
         return response()->json($query->paginate($perPage));
+    }
+
+    private function applyLeadStatusFilter(Builder $query, string $statusFilter): void
+    {
+        $qualifiedKeys = config('marketing.qualified_stage_keys', ['enrolled', 'itb']);
+        $keys = match ($statusFilter) {
+            'Qualified' => $qualifiedKeys,
+            'Follow-up' => ['follow_up', 'prospect', 'demo_required', 'dnp'],
+            'Not Interested' => ['nifc', 'first_call_nifc', 'natc'],
+            'Fraud' => ['invalid_junk', 'disqualified', 'duplicate_lead'],
+            default => null,
+        };
+        if ($keys !== null) {
+            $query->whereHas('stage', fn ($q) => $q->whereIn('key', $keys));
+        }
     }
 
     public function store(Request $request, LeadService $leadService)

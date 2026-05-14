@@ -210,13 +210,22 @@ class LeadApiTest extends TestCase
         ]);
     }
 
-    public function test_lead_form_options_include_inactive_requires_admin(): void
+    public function test_lead_form_options_include_inactive_requires_privileged_role(): void
     {
         $this->seed(LeadFormOptionSeeder::class);
         $user = $this->makeUser('marketer');
         Sanctum::actingAs($user);
 
         $this->getJson('/api/v1/lead-form-options?include_inactive=1')->assertForbidden();
+    }
+
+    public function test_dept_head_can_access_lead_form_options_with_include_inactive(): void
+    {
+        $this->seed(LeadFormOptionSeeder::class);
+        $user = $this->makeUser('dept_head');
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/v1/lead-form-options?include_inactive=1')->assertOk();
     }
 
     public function test_lead_form_options_include_inactive_returns_deactivated_rows(): void

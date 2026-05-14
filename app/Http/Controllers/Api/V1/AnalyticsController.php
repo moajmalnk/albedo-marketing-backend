@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Lead;
 use App\Models\LeadActivity;
 use App\Models\Task;
+use App\Services\MarketingAnalyticsService;
+use App\Services\RoleDashboardAnalyticsService;
 use Illuminate\Http\Request;
 
 class AnalyticsController extends Controller
@@ -25,5 +27,28 @@ class AnalyticsController extends Controller
                 'total' => Task::query()->count(),
             ],
         ]);
+    }
+
+    public function marketing(Request $request, MarketingAnalyticsService $marketingAnalyticsService)
+    {
+        $request->user()?->loadMissing('role');
+        $this->assertMarketingDashboardRole($request);
+
+        return response()->json($marketingAnalyticsService->summarize($request));
+    }
+
+    public function roleSummary(Request $request, RoleDashboardAnalyticsService $roleDashboardAnalyticsService)
+    {
+        $request->user()?->loadMissing('role');
+
+        return response()->json($roleDashboardAnalyticsService->summarize($request));
+    }
+
+    private function assertMarketingDashboardRole(Request $request): void
+    {
+        $key = $request->user()?->role?->key;
+        if (! in_array($key, ['super_admin', 'admin', 'dept_head'], true)) {
+            abort(403);
+        }
     }
 }
