@@ -61,6 +61,8 @@ class ChallengeCategoryController extends Controller
     {
         $this->ensureSettingsAdmin($request);
 
+        $deptForUnique = $request->input('department', $challenge_category->department);
+
         $data = $request->validate([
             'name' => [
                 'sometimes',
@@ -68,7 +70,7 @@ class ChallengeCategoryController extends Controller
                 'string',
                 'max:191',
                 Rule::unique('challenge_categories', 'name')
-                    ->where(fn ($q) => $q->where('department', $request->input('department', $challenge_category->department)))
+                    ->where(fn ($q) => $q->where('department', $deptForUnique))
                     ->ignore($challenge_category->id),
             ],
             'department' => ['sometimes', 'required', 'string', Rule::in(['Performance Marketing', 'Influence Marketing', 'Both'])],

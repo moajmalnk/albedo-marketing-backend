@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\AttendanceController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CalendarController;
+use App\Http\Controllers\Api\V1\ChallengeCategoryController;
 use App\Http\Controllers\Api\V1\DepartmentController;
 use App\Http\Controllers\Api\V1\EnrollmentController;
 use App\Http\Controllers\Api\V1\ExpenseController;
@@ -11,6 +12,7 @@ use App\Http\Controllers\Api\V1\FinanceController;
 use App\Http\Controllers\Api\V1\LeadActivityController;
 use App\Http\Controllers\Api\V1\LeadController;
 use App\Http\Controllers\Api\V1\LeadImportController;
+use App\Http\Controllers\Api\V1\MarketingChallengeController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\TaskController;
@@ -51,6 +53,13 @@ Route::prefix('v1')->group(function (): void {
 
         Route::post('/departments/bulk-delete', [DepartmentController::class, 'bulkDestroy']);
         Route::apiResource('departments', DepartmentController::class);
+
+        Route::get('/challenge-categories', [ChallengeCategoryController::class, 'index']);
+        Route::post('/challenge-categories', [ChallengeCategoryController::class, 'store']);
+        Route::patch('/challenge-categories/{challenge_category}', [ChallengeCategoryController::class, 'update']);
+        Route::delete('/challenge-categories/{challenge_category}', [ChallengeCategoryController::class, 'destroy']);
+
+        Route::apiResource('marketing-challenges', MarketingChallengeController::class);
 
         Route::get('/users', [UserController::class, 'index']);
         Route::post('/users', [UserController::class, 'store']);

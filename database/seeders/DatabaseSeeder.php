@@ -15,6 +15,8 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,
             LeadStageSeeder::class,
             UserSeeder::class,
+            ChallengeCategorySeeder::class,
+            MarketingChallengeSeeder::class,
         ]);
     }
 }
