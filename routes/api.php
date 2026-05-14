@@ -80,6 +80,8 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/attendance/check-in', [AttendanceController::class, 'checkIn']);
         Route::post('/attendance/check-out', [AttendanceController::class, 'checkOut']);
         Route::get('/attendance/today', [AttendanceController::class, 'today']);
+        Route::get('/attendance/reports', [AttendanceController::class, 'reports']);
+        Route::get('/attendance/monthly-summary', [AttendanceController::class, 'monthlySummary']);
 
         Route::middleware('leadership.override')->group(function (): void {
             Route::middleware('active.checkin')->group(function (): void {
