@@ -13,11 +13,25 @@ use App\Models\WhatsAppSession;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
+    /**
+     * Avoid SQL errors when the DB predates profile migrations (e.g. older SQL dumps).
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    private function onlyExistingUserColumns(array $attributes): array
+    {
+        $columns = array_flip(Schema::getColumnListing((new User)->getTable()));
+
+        return array_intersect_key($attributes, $columns);
+    }
+
     private function ensureCanManageUsers(Request $request): void
     {
         $actor = $request->user()?->loadMissing('role');
@@ -159,7 +173,7 @@ class UserController extends Controller
         $legacyDepartmentCode = $data['department'] ?? null;
         unset($data['department_ids'], $data['primary_department_id'], $data['department']);
 
-        $user = User::query()->create([
+        $user = User::query()->create($this->onlyExistingUserColumns([
             'first_name' => $data['first_name'],
             'last_name' => $data['last_name'] ?? null,
             'email' => strtolower($data['email']),
@@ -173,7 +187,7 @@ class UserController extends Controller
             'reporting_manager_id' => $data['reporting_manager_id'] ?? null,
             'status' => 'active',
             'password_hash' => Hash::make($data['password']),
-        ]);
+        ]));
 
         $roleKey = (string) $data['role_key'];
         if ($request->has('department_ids')) {
@@ -234,9 +248,10 @@ class UserController extends Controller
             $data['email'] = strtolower((string) $data['email']);
         }
 
-        $before = $user->only(array_keys($data));
-        $user->update($data);
-        $this->audit($request, 'user.update', $user, $before, $user->only(array_keys($data)));
+        $payload = $this->onlyExistingUserColumns($data);
+        $before = $user->only(array_keys($payload));
+        $user->update($payload);
+        $this->audit($request, 'user.update', $user, $before, $user->only(array_keys($payload)));
 
         $user->refresh()->load('role');
         $roleKey = (string) $user->role?->key;
@@ -334,11 +349,14 @@ class UserController extends Controller
                 $q->whereNull('status')->orWhereNotIn('status', ['Enrolled', 'Disqualified']);
             })
             ->count();
-        $waLeadsToday = DB::table('leads')
-            ->where('captured_by_user_id', $user->id)
-            ->where('source_code', 'whatsapp')
-            ->whereDate('created_at', $today)
-            ->count();
+        $waLeadsToday = Schema::hasColumn('leads', 'captured_by_user_id')
+            ? DB::table('leads')
+                ->where('captured_by_user_id', $user->id)
+                ->where('source_code', 'whatsapp')
+                ->whereDate('created_at', $today)
+                ->whereNull('deleted_at')
+                ->count()
+            : 0;
         $activitiesLast7 = LeadActivity::query()
             ->where('user_id', $user->id)
             ->where('occurred_at', '>=', now()->subDays(7))
@@ -348,10 +366,12 @@ class UserController extends Controller
             ->orderByDesc('check_in_at')
             ->value('check_in_at');
 
-        $waSession = WhatsAppSession::query()
-            ->where('user_id', $user->id)
-            ->where('session_name', 'default')
-            ->first(['status', 'phone_number', 'last_sync']);
+        $waSession = Schema::hasTable('whatsapp_sessions')
+            ? WhatsAppSession::query()
+                ->where('user_id', $user->id)
+                ->where('session_name', 'default')
+                ->first(['status', 'phone_number', 'last_sync'])
+            : null;
 
         return response()->json([
             'leads_owned_total' => $leadsTotal,
@@ -402,7 +422,7 @@ class UserController extends Controller
             'address' => ['nullable', 'string'],
         ]);
 
-        $user->update($data);
+        $user->update($this->onlyExistingUserColumns($data));
 
         return response()->json($user->fresh()->load(['role', 'manager:id,first_name,last_name', 'departments']));
     }

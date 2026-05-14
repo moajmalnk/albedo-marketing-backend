@@ -3,6 +3,9 @@
 -- Equivalent to:
 --   backend/database/migrations/2026_05_09_140000_extend_users_with_profile_fields.php
 --
+-- Run on any MySQL DB where `users` is missing: whatsapp, sub_brand, address, notes
+-- (fixes PATCH /api/v1/users/{id} and profile saves with SQLSTATE[42S22] unknown column).
+--
 -- Safe to re-run: uses ADD COLUMN IF NOT EXISTS.
 -- =====================================================================
 

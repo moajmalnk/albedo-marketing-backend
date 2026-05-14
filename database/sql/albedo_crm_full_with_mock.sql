@@ -1,5 +1,16 @@
 -- Albedo CRM full schema + mock data (MySQL 8)
 -- Generated for: u262074081_albedo_market
+--
+-- LOGIN / ENVIRONMENT (read this)
+-- 1) Mock password for seeded @albedoedu.com users below is: Admin@12345
+--    The bcrypt in this file is generated with PHP password_hash(..., PASSWORD_BCRYPT, cost 12)
+--    and verified with password_verify('Admin@12345', ...).
+-- 2) The Vite app must call the API whose DATABASE you imported this into.
+--    If you import into local MySQL but VITE_API_BASE_URL points at production,
+--    login will fail — point the SPA at your local Laravel, e.g.
+--    http://127.0.0.1:8000/api/v1 (see repo .env.example).
+-- 3) Production: import this file (or run patch_mock_user_password_to_admin.sql) into the
+--    same database the deployed Laravel API uses.
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
@@ -110,6 +121,7 @@ CREATE TABLE `personal_access_tokens` (
 -- -----------------------------------------------------
 DROP TABLE IF EXISTS `role_permissions`;
 DROP TABLE IF EXISTS `permissions`;
+DROP TABLE IF EXISTS `whatsapp_sessions`;
 DROP TABLE IF EXISTS `users`;
 DROP TABLE IF EXISTS `roles`;
 
@@ -131,8 +143,12 @@ CREATE TABLE `users` (
   `email` varchar(255) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
   `phone` varchar(20) DEFAULT NULL,
+  `whatsapp` varchar(20) DEFAULT NULL,
   `role_id` bigint unsigned NOT NULL,
-  `department` enum('PM','IM','SALES','OPS') DEFAULT NULL,
+  `department` varchar(32) DEFAULT NULL,
+  `sub_brand` varchar(80) DEFAULT NULL,
+  `address` text,
+  `notes` text,
   `reporting_manager_id` bigint unsigned DEFAULT NULL,
   `status` enum('active','inactive') NOT NULL DEFAULT 'active',
   `phone_extension` varchar(20) DEFAULT NULL,
@@ -201,6 +217,7 @@ CREATE TABLE `leads` (
   `student_name` varchar(160) NOT NULL,
   `phone` varchar(20) NOT NULL,
   `whatsapp` varchar(20) DEFAULT NULL,
+  `whatsapp_id` varchar(64) DEFAULT NULL,
   `email` varchar(160) DEFAULT NULL,
   `parent_name` varchar(160) DEFAULT NULL,
   `parent_relation` enum('father','mother','guardian') DEFAULT NULL,
@@ -220,21 +237,41 @@ CREATE TABLE `leads` (
   `stage_id` bigint unsigned DEFAULT NULL,
   `status` varchar(40) DEFAULT NULL,
   `owner_id` bigint unsigned DEFAULT NULL,
+  `captured_by_user_id` bigint unsigned DEFAULT NULL,
   `assigned_dept` enum('SALES','MARKETING') NOT NULL DEFAULT 'SALES',
   `is_read_only` tinyint(1) NOT NULL DEFAULT '0',
   `priority` enum('low','normal','high') NOT NULL DEFAULT 'normal',
   `dnd` tinyint(1) NOT NULL DEFAULT '0',
   `next_action_at` timestamp NULL DEFAULT NULL,
+  `last_contacted_at` timestamp NULL DEFAULT NULL,
   `created_by` bigint unsigned DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   `deleted_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `leads_phone_unique` (`phone`),
+  UNIQUE KEY `leads_whatsapp_id_unique` (`whatsapp_id`),
   KEY `leads_owner_id_stage_id_index` (`owner_id`,`stage_id`),
+  KEY `leads_captured_by_user_id_index` (`captured_by_user_id`),
   KEY `leads_source_group_source_code_index` (`source_group`,`source_code`),
   KEY `leads_next_action_at_index` (`next_action_at`),
   KEY `leads_assigned_dept_stage_id_index` (`assigned_dept`,`stage_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `whatsapp_sessions` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint unsigned NOT NULL,
+  `session_name` varchar(80) NOT NULL,
+  `status` enum('DISCONNECTED','PAIRING','CONNECTED','ERROR') NOT NULL DEFAULT 'DISCONNECTED',
+  `phone_number` varchar(32) DEFAULT NULL,
+  `last_qr` text,
+  `last_sync` timestamp NULL DEFAULT NULL,
+  `last_error` text,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `whatsapp_sessions_user_id_session_name_unique` (`user_id`,`session_name`),
+  KEY `whatsapp_sessions_status_index` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `lead_stage_transitions` (
@@ -254,7 +291,7 @@ CREATE TABLE `lead_activities` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `lead_id` bigint unsigned NOT NULL,
   `user_id` bigint unsigned DEFAULT NULL,
-  `type` enum('call','whatsapp','sms','email','note','assessment','meeting') NOT NULL,
+  `type` enum('call','whatsapp','sms','email','note','assessment','meeting','followup') NOT NULL,
   `direction` enum('inbound','outbound') DEFAULT NULL,
   `connected` tinyint(1) DEFAULT NULL,
   `outcome` varchar(60) DEFAULT NULL,
@@ -389,7 +426,11 @@ ALTER TABLE `role_permissions`
 ALTER TABLE `leads`
   ADD CONSTRAINT `fk_leads_stage` FOREIGN KEY (`stage_id`) REFERENCES `lead_stages` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `fk_leads_owner` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_leads_captured_by` FOREIGN KEY (`captured_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `fk_leads_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+ALTER TABLE `whatsapp_sessions`
+  ADD CONSTRAINT `fk_whatsapp_sessions_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 
 ALTER TABLE `lead_stage_transitions`
   ADD CONSTRAINT `fk_transitions_lead` FOREIGN KEY (`lead_id`) REFERENCES `leads` (`id`) ON DELETE CASCADE,
@@ -452,16 +493,16 @@ INSERT INTO `role_permissions` (`role_id`, `permission_id`, `created_at`, `updat
 (6,1,NOW(),NOW()),(6,2,NOW(),NOW()),(6,8,NOW(),NOW()),
 (7,1,NOW(),NOW()),(7,2,NOW(),NOW()),(7,4,NOW(),NOW());
 
--- password hash below corresponds to "Admin@12345"
-INSERT INTO `users` (`id`,`first_name`,`last_name`,`email`,`password_hash`,`phone`,`role_id`,`department`,`reporting_manager_id`,`status`,`phone_extension`,`last_login_at`,`created_at`,`updated_at`) VALUES
-(1,'Yadukrishnan','P','yadukrishnan@albedoedu.com','$2y$12$Mf6aEuHn3x7RzP7KQHhXru2Qd2GcYf5bFwoQzM5D9d9GQZsD2k6HW','+919900000001',1,'OPS',NULL,'active','1001',NULL,NOW(),NOW()),
-(2,'Dilshada',NULL,'dilshada@albedoedu.com','$2y$12$Mf6aEuHn3x7RzP7KQHhXru2Qd2GcYf5bFwoQzM5D9d9GQZsD2k6HW','+919900000002',2,'OPS',1,'active','1002',NULL,NOW(),NOW()),
-(3,'Naseef',NULL,'naseef@albedoedu.com','$2y$12$Mf6aEuHn3x7RzP7KQHhXru2Qd2GcYf5bFwoQzM5D9d9GQZsD2k6HW','+919900000003',3,'PM',2,'active','1101',NULL,NOW(),NOW()),
-(4,'Ajmal',NULL,'ajmal@albedoedu.com','$2y$12$Mf6aEuHn3x7RzP7KQHhXru2Qd2GcYf5bFwoQzM5D9d9GQZsD2k6HW','+919900000004',3,'SALES',2,'active','1201',NULL,NOW(),NOW()),
-(5,'Fahis',NULL,'fahis@albedoedu.com','$2y$12$Mf6aEuHn3x7RzP7KQHhXru2Qd2GcYf5bFwoQzM5D9d9GQZsD2k6HW','+919900000005',6,'SALES',4,'active','1301',NULL,NOW(),NOW()),
-(6,'Raoof',NULL,'raoof@albedoedu.com','$2y$12$Mf6aEuHn3x7RzP7KQHhXru2Qd2GcYf5bFwoQzM5D9d9GQZsD2k6HW','+919900000006',7,'SALES',4,'active','1401',NULL,NOW(),NOW()),
-(7,'Shibin',NULL,'shibin@albedoedu.com','$2y$12$Mf6aEuHn3x7RzP7KQHhXru2Qd2GcYf5bFwoQzM5D9d9GQZsD2k6HW','+919900000007',5,'SALES',4,'active','1501',NULL,NOW(),NOW()),
-(8,'Irshad',NULL,'irshad@albedoedu.com','$2y$12$Mf6aEuHn3x7RzP7KQHhXru2Qd2GcYf5bFwoQzM5D9d9GQZsD2k6HW','+919900000008',4,'IM',3,'active','1601',NULL,NOW(),NOW());
+-- password_hash: bcrypt for plain text "Admin@12345" (PHP password_hash / password_verify)
+INSERT INTO `users` (`id`,`first_name`,`last_name`,`email`,`password_hash`,`phone`,`whatsapp`,`role_id`,`department`,`sub_brand`,`address`,`notes`,`reporting_manager_id`,`status`,`phone_extension`,`last_login_at`,`created_at`,`updated_at`) VALUES
+(1,'Yadukrishnan','P','yadukrishnan@albedoedu.com','$2y$12$sHfpH1dFtgUfUdWR6q3znehjkTPjIAuf6xR5jVo5AQCGRwMxubZba','+919900000001',NULL,1,'OPS',NULL,NULL,NULL,NULL,'active','1001',NULL,NOW(),NOW()),
+(2,'Dilshada',NULL,'dilshada@albedoedu.com','$2y$12$sHfpH1dFtgUfUdWR6q3znehjkTPjIAuf6xR5jVo5AQCGRwMxubZba','+919900000002',NULL,2,'OPS',NULL,NULL,NULL,1,'active','1002',NULL,NOW(),NOW()),
+(3,'Naseef',NULL,'naseef@albedoedu.com','$2y$12$sHfpH1dFtgUfUdWR6q3znehjkTPjIAuf6xR5jVo5AQCGRwMxubZba','+919900000003',NULL,3,'PM',NULL,NULL,NULL,2,'active','1101',NULL,NOW(),NOW()),
+(4,'Ajmal',NULL,'ajmal@albedoedu.com','$2y$12$sHfpH1dFtgUfUdWR6q3znehjkTPjIAuf6xR5jVo5AQCGRwMxubZba','+919900000004',NULL,3,'SALES',NULL,NULL,NULL,2,'active','1201',NULL,NOW(),NOW()),
+(5,'Fahis',NULL,'fahis@albedoedu.com','$2y$12$sHfpH1dFtgUfUdWR6q3znehjkTPjIAuf6xR5jVo5AQCGRwMxubZba','+919900000005',NULL,6,'SALES',NULL,NULL,NULL,4,'active','1301',NULL,NOW(),NOW()),
+(6,'Raoof',NULL,'raoof@albedoedu.com','$2y$12$sHfpH1dFtgUfUdWR6q3znehjkTPjIAuf6xR5jVo5AQCGRwMxubZba','+919900000006',NULL,7,'SALES',NULL,NULL,NULL,4,'active','1401',NULL,NOW(),NOW()),
+(7,'Shibin',NULL,'shibin@albedoedu.com','$2y$12$sHfpH1dFtgUfUdWR6q3znehjkTPjIAuf6xR5jVo5AQCGRwMxubZba','+919900000007',NULL,5,'SALES',NULL,NULL,NULL,4,'active','1501',NULL,NOW(),NOW()),
+(8,'Irshad',NULL,'irshad@albedoedu.com','$2y$12$sHfpH1dFtgUfUdWR6q3znehjkTPjIAuf6xR5jVo5AQCGRwMxubZba','+919900000008',NULL,4,'IM',NULL,NULL,NULL,3,'active','1601',NULL,NOW(),NOW());
 
 INSERT INTO `lead_stages` (`id`,`key`,`label`,`group`,`order`,`color`,`is_terminal`,`created_at`,`updated_at`) VALUES
 (1,'new_lead','New Lead','active',1,'#3b82f6',0,NOW(),NOW()),
