@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceLog;
 use App\Models\AuditLog;
+use App\Models\Department;
 use App\Models\LeadActivity;
 use App\Models\Role;
 use App\Models\User;
@@ -13,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
@@ -40,12 +42,61 @@ class UserController extends Controller
         ]);
     }
 
+    /**
+     * @param  list<int>  $departmentIds
+     */
+    private function assertDeptHeadSingleDepartment(string $roleKey, array $departmentIds): void
+    {
+        if ($roleKey !== 'dept_head') {
+            return;
+        }
+
+        if (count($departmentIds) !== 1) {
+            throw ValidationException::withMessages([
+                'department_ids' => ['Department heads must be assigned to exactly one department.'],
+            ]);
+        }
+    }
+
+    /**
+     * @param  list<int>|null  $departmentIds
+     */
+    private function syncUserDepartments(User $user, ?array $departmentIds, ?int $primaryDepartmentId, string $roleKey): void
+    {
+        $ids = array_values(array_unique(array_map('intval', $departmentIds ?? [])));
+
+        $this->assertDeptHeadSingleDepartment($roleKey, $ids);
+
+        if ($ids === []) {
+            $user->departments()->detach();
+            $user->update(['department' => null]);
+
+            return;
+        }
+
+        $primaryId = $primaryDepartmentId !== null ? (int) $primaryDepartmentId : (int) $ids[0];
+        if (! in_array($primaryId, $ids, true)) {
+            throw ValidationException::withMessages([
+                'primary_department_id' => ['Primary department must be one of the selected departments.'],
+            ]);
+        }
+
+        $sync = [];
+        foreach ($ids as $id) {
+            $sync[$id] = ['is_primary' => $id === $primaryId];
+        }
+        $user->departments()->sync($sync);
+
+        $code = Department::query()->whereKey($primaryId)->value('code');
+        $user->update(['department' => $code]);
+    }
+
     public function index(Request $request)
     {
         $this->ensureCanManageUsers($request);
 
         $query = User::query()
-            ->with(['role', 'manager:id,first_name,last_name'])
+            ->with(['role', 'manager:id,first_name,last_name', 'departments'])
             ->orderBy('id')
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->when(
@@ -73,7 +124,7 @@ class UserController extends Controller
     {
         $this->ensureCanManageUsers($request);
 
-        return response()->json($user->load(['role', 'manager:id,first_name,last_name']));
+        return response()->json($user->load(['role', 'manager:id,first_name,last_name', 'departments']));
     }
 
     public function store(Request $request)
@@ -87,7 +138,10 @@ class UserController extends Controller
             'phone' => ['nullable', 'string', 'max:20'],
             'whatsapp' => ['nullable', 'string', 'max:20'],
             'role_key' => ['required', 'string', 'exists:roles,key'],
-            'department' => ['nullable', Rule::in(['PM', 'IM', 'SALES', 'OPS'])],
+            'department' => ['nullable', 'string', 'max:32', Rule::exists('departments', 'code')],
+            'department_ids' => ['sometimes', 'array', 'max:20'],
+            'department_ids.*' => ['integer', 'exists:departments,id'],
+            'primary_department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'sub_brand' => ['nullable', 'string', 'max:80'],
             'address' => ['nullable', 'string'],
             'notes' => ['nullable', 'string'],
@@ -100,6 +154,11 @@ class UserController extends Controller
             return response()->json(['message' => 'Invalid role'], 422);
         }
 
+        $departmentIdsPayload = $data['department_ids'] ?? null;
+        $primaryDepartmentId = $data['primary_department_id'] ?? null;
+        $legacyDepartmentCode = $data['department'] ?? null;
+        unset($data['department_ids'], $data['primary_department_id'], $data['department']);
+
         $user = User::query()->create([
             'first_name' => $data['first_name'],
             'last_name' => $data['last_name'] ?? null,
@@ -107,7 +166,7 @@ class UserController extends Controller
             'phone' => $data['phone'] ?? null,
             'whatsapp' => $data['whatsapp'] ?? null,
             'role_id' => $roleId,
-            'department' => $data['department'] ?? null,
+            'department' => null,
             'sub_brand' => $data['sub_brand'] ?? null,
             'address' => $data['address'] ?? null,
             'notes' => $data['notes'] ?? null,
@@ -116,9 +175,19 @@ class UserController extends Controller
             'password_hash' => Hash::make($data['password']),
         ]);
 
+        $roleKey = (string) $data['role_key'];
+        if ($request->has('department_ids')) {
+            $this->syncUserDepartments($user, $departmentIdsPayload !== null ? array_values($departmentIdsPayload) : [], $primaryDepartmentId, $roleKey);
+        } elseif ($legacyDepartmentCode) {
+            $dept = Department::query()->where('code', $legacyDepartmentCode)->first();
+            if ($dept) {
+                $this->syncUserDepartments($user, [(int) $dept->id], (int) $dept->id, $roleKey);
+            }
+        }
+
         $this->audit($request, 'user.create', $user, null, $user->only(['email', 'role_id', 'department']));
 
-        return response()->json($user->load(['role', 'manager:id,first_name,last_name']), 201);
+        return response()->json($user->fresh()->load(['role', 'manager:id,first_name,last_name', 'departments']), 201);
     }
 
     public function update(Request $request, User $user)
@@ -132,7 +201,10 @@ class UserController extends Controller
             'phone' => ['nullable', 'string', 'max:20'],
             'whatsapp' => ['nullable', 'string', 'max:20'],
             'role_key' => ['nullable', 'string', 'exists:roles,key'],
-            'department' => ['nullable', Rule::in(['PM', 'IM', 'SALES', 'OPS'])],
+            'department' => ['nullable', 'string', 'max:32', Rule::exists('departments', 'code')],
+            'department_ids' => ['sometimes', 'array', 'max:20'],
+            'department_ids.*' => ['integer', 'exists:departments,id'],
+            'primary_department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'sub_brand' => ['nullable', 'string', 'max:80'],
             'address' => ['nullable', 'string'],
             'notes' => ['nullable', 'string'],
@@ -142,6 +214,11 @@ class UserController extends Controller
         if (array_key_exists('reporting_manager_id', $data) && (int) $data['reporting_manager_id'] === (int) $user->id) {
             return response()->json(['message' => 'User cannot report to self'], 422);
         }
+
+        $departmentIdsPayload = array_key_exists('department_ids', $data) ? $data['department_ids'] : null;
+        $primaryDepartmentId = $data['primary_department_id'] ?? null;
+        $legacyDepartmentCode = array_key_exists('department', $data) ? $data['department'] : false;
+        unset($data['department_ids'], $data['primary_department_id'], $data['department']);
 
         if (! empty($data['role_key'])) {
             $roleId = Role::query()->where('key', $data['role_key'])->value('id');
@@ -161,7 +238,28 @@ class UserController extends Controller
         $user->update($data);
         $this->audit($request, 'user.update', $user, $before, $user->only(array_keys($data)));
 
-        return response()->json($user->fresh()->load(['role', 'manager:id,first_name,last_name']));
+        $user->refresh()->load('role');
+        $roleKey = (string) $user->role?->key;
+
+        if ($request->has('department_ids')) {
+            $this->syncUserDepartments(
+                $user,
+                $departmentIdsPayload !== null ? array_values($departmentIdsPayload) : [],
+                $primaryDepartmentId,
+                $roleKey
+            );
+        } elseif ($legacyDepartmentCode !== false) {
+            if ($legacyDepartmentCode === null || $legacyDepartmentCode === '') {
+                $this->syncUserDepartments($user, [], null, $roleKey);
+            } else {
+                $dept = Department::query()->where('code', (string) $legacyDepartmentCode)->first();
+                if ($dept) {
+                    $this->syncUserDepartments($user, [(int) $dept->id], (int) $dept->id, $roleKey);
+                }
+            }
+        }
+
+        return response()->json($user->fresh()->load(['role', 'manager:id,first_name,last_name', 'departments']));
     }
 
     public function updateStatus(Request $request, User $user)
@@ -284,7 +382,7 @@ class UserController extends Controller
 
     public function me(Request $request)
     {
-        $user = $request->user()?->load(['role', 'manager:id,first_name,last_name']);
+        $user = $request->user()?->load(['role', 'manager:id,first_name,last_name', 'departments']);
 
         return response()->json($user);
     }
@@ -306,6 +404,6 @@ class UserController extends Controller
 
         $user->update($data);
 
-        return response()->json($user->fresh()->load(['role', 'manager:id,first_name,last_name']));
+        return response()->json($user->fresh()->load(['role', 'manager:id,first_name,last_name', 'departments']));
     }
 }

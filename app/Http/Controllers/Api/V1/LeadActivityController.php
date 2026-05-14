@@ -7,6 +7,7 @@ use App\Models\Assessment;
 use App\Models\Lead;
 use App\Models\LeadActivity;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class LeadActivityController extends Controller
 {
@@ -18,7 +19,7 @@ class LeadActivityController extends Controller
     public function store(Request $request, Lead $lead)
     {
         $data = $request->validate([
-            'type' => ['required', 'string'],
+            'type' => ['required', 'string', Rule::in(['call', 'whatsapp', 'sms', 'email', 'note', 'assessment', 'meeting', 'followup'])],
             'direction' => ['nullable', 'string'],
             'connected' => ['nullable', 'boolean'],
             'outcome' => ['nullable', 'string'],

@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\AttendanceController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CalendarController;
+use App\Http\Controllers\Api\V1\DepartmentController;
 use App\Http\Controllers\Api\V1\EnrollmentController;
 use App\Http\Controllers\Api\V1\ExpenseController;
 use App\Http\Controllers\Api\V1\FinanceController;
@@ -47,6 +48,9 @@ Route::prefix('v1')->group(function (): void {
         Route::patch('/me', [UserController::class, 'updateMe']);
 
         Route::get('/roles', [RoleController::class, 'index']);
+
+        Route::post('/departments/bulk-delete', [DepartmentController::class, 'bulkDestroy']);
+        Route::apiResource('departments', DepartmentController::class);
 
         Route::get('/users', [UserController::class, 'index']);
         Route::post('/users', [UserController::class, 'store']);

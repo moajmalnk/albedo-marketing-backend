@@ -21,17 +21,18 @@ class AuthController extends Controller
         $user->update(['last_login_at' => now()]);
         $token = $user->createToken('api-token')->plainTextToken;
 
-        return response()->json(['token' => $token, 'user' => $user->load('role')]);
+        return response()->json(['token' => $token, 'user' => $user->load(['role', 'departments'])]);
     }
 
     public function logout(Request $request)
     {
         $request->user()?->currentAccessToken()?->delete();
+
         return response()->json(['message' => 'Logged out']);
     }
 
     public function me(Request $request)
     {
-        return response()->json($request->user()?->load('role'));
+        return response()->json($request->user()?->load(['role', 'departments']));
     }
 }
