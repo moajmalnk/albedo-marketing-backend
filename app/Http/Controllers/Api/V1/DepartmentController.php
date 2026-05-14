@@ -20,9 +20,19 @@ class DepartmentController extends Controller
         }
     }
 
+    private function ensureCanListDepartments(Request $request): void
+    {
+        $actor = $request->user()?->loadMissing('role');
+        $roleKey = $actor?->role?->key;
+
+        if (! in_array($roleKey, ['super_admin', 'admin', 'dept_head'], true)) {
+            abort(403, 'You are not authorized to view departments.');
+        }
+    }
+
     public function index(Request $request)
     {
-        $this->ensureSettingsAdmin($request);
+        $this->ensureCanListDepartments($request);
 
         $departments = Department::query()
             ->withCount('users')
@@ -89,7 +99,7 @@ class DepartmentController extends Controller
 
     public function show(Request $request, Department $department)
     {
-        $this->ensureSettingsAdmin($request);
+        $this->ensureCanListDepartments($request);
 
         return response()->json($department->loadCount('users'));
     }
