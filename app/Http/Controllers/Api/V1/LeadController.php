@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Lead;
 use App\Models\LeadStage;
 use App\Models\LeadStageTransition;
+use App\Models\User;
 use App\Services\LeadService;
 use App\Support\LeadChannelClassifier;
 use App\Support\LeadFormPicklist;
@@ -53,13 +54,29 @@ class LeadController extends Controller
             'country' => ['nullable', 'string', 'max:80'],
             'created_by' => ['nullable', 'integer'],
             'generated_by_user_id' => ['nullable', 'integer'],
+            'attributed_to_user_id' => ['nullable', 'integer'],
+            'manager_id' => ['nullable', 'integer', 'exists:users,id'],
             'status_filter' => ['nullable', 'string', Rule::in(['All', 'Qualified', 'Follow-up', 'Not Interested', 'Fraud'])],
             'tab' => ['nullable', 'string', Rule::in(['All', 'WhatsApp', 'Form', 'Call', 'Message'])],
             'month' => ['nullable', 'string'],
             'year' => ['nullable', 'string'],
+            'q' => ['nullable', 'string', 'max:120'],
         ]);
 
         $query = Lead::query()->with(['stage', 'owner']);
+        if ($request->filled('q')) {
+            $needle = trim((string) $request->string('q'));
+            if ($needle !== '') {
+                $query->where(function (Builder $sq) use ($needle) {
+                    $sq->where('student_name', 'like', '%'.$needle.'%')
+                        ->orWhere('phone', 'like', '%'.$needle.'%')
+                        ->orWhere('email', 'like', '%'.$needle.'%');
+                    if (preg_match('/^\d+$/', $needle)) {
+                        $sq->orWhere('id', (int) $needle);
+                    }
+                });
+            }
+        }
         if ($request->filled('stage')) {
             $query->whereHas('stage', fn ($q) => $q->where('key', $request->string('stage')));
         }
@@ -86,6 +103,24 @@ class LeadController extends Controller
         }
         if ($request->filled('generated_by_user_id')) {
             $query->where('generated_by_user_id', (int) $request->input('generated_by_user_id'));
+        }
+        if ($request->filled('attributed_to_user_id')) {
+            $uid = (int) $request->input('attributed_to_user_id');
+            $query->where(function (Builder $q) use ($uid) {
+                $q->where('generated_by_user_id', $uid)->orWhere('created_by', $uid);
+            });
+        }
+        if ($request->filled('manager_id')) {
+            $mid = (int) $request->input('manager_id');
+            $ownerIds = User::query()
+                ->where('reporting_manager_id', $mid)
+                ->whereHas('role', fn (Builder $q) => $q->where('key', 'telecaller'))
+                ->pluck('id');
+            if ($ownerIds->isEmpty()) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->whereIn('owner_id', $ownerIds);
+            }
         }
         $statusFilter = $request->input('status_filter', 'All');
         if ($statusFilter !== 'All' && is_string($statusFilter)) {

@@ -76,6 +76,24 @@ class LeadApiTest extends TestCase
         $this->assertSame($new->id, $lead->fresh()->stage_id);
     }
 
+    public function test_lead_index_filters_by_q(): void
+    {
+        $stage = LeadStage::query()->where('key', 'new_lead')->firstOrFail();
+        $user = $this->makeUser();
+        Lead::query()->create(['student_name' => 'UniqueAlphaBeta', 'phone' => '911111111111', 'stage_id' => $stage->id]);
+        Lead::query()->create(['student_name' => 'OtherPerson', 'phone' => '922222222222', 'stage_id' => $stage->id]);
+
+        Sanctum::actingAs($user);
+        $response = $this->getJson('/api/v1/leads?q='.urlencode('UniqueAlpha').'&limit=50');
+
+        $response->assertOk();
+        $data = $response->json('data');
+        $this->assertIsArray($data);
+        $names = array_column($data, 'student_name');
+        $this->assertContains('UniqueAlphaBeta', $names);
+        $this->assertNotContains('OtherPerson', $names);
+    }
+
     public function test_lead_form_options_returns_grouped_shape(): void
     {
         $this->seed(LeadFormOptionSeeder::class);

@@ -8,6 +8,7 @@ use App\Models\LeadActivity;
 use App\Models\Task;
 use App\Services\MarketingAnalyticsService;
 use App\Services\RoleDashboardAnalyticsService;
+use App\Services\TeamInsightsAnalyticsService;
 use Illuminate\Http\Request;
 
 class AnalyticsController extends Controller
@@ -42,6 +43,27 @@ class AnalyticsController extends Controller
         $request->user()?->loadMissing('role');
 
         return response()->json($roleDashboardAnalyticsService->summarize($request));
+    }
+
+    public function teamInsights(Request $request, TeamInsightsAnalyticsService $teamInsightsAnalyticsService)
+    {
+        $request->validate([
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date'],
+        ]);
+
+        $request->user()?->loadMissing('role');
+        $this->assertTeamInsightsRole($request);
+
+        return response()->json($teamInsightsAnalyticsService->summarize($request));
+    }
+
+    private function assertTeamInsightsRole(Request $request): void
+    {
+        $key = $request->user()?->role?->key;
+        if (! in_array($key, ['super_admin', 'admin'], true)) {
+            abort(403);
+        }
     }
 
     private function assertMarketingDashboardRole(Request $request): void
