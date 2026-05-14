@@ -73,7 +73,13 @@ class LeadController extends Controller
     public function store(Request $request, LeadService $leadService)
     {
         $data = $request->validate([
-            'student_name' => ['required', 'string', 'max:160'],
+            'capture_qualification' => ['nullable', 'string', Rule::in(['qualified', 'not_qualified'])],
+            'student_name' => [
+                Rule::requiredIf(fn () => ($request->input('capture_qualification') ?? 'qualified') !== 'not_qualified'),
+                'nullable',
+                'string',
+                'max:160',
+            ],
             'phone' => ['required', 'string', 'max:20'],
             'alternate_phone' => ['nullable', 'string', 'max:20'],
             'whatsapp' => ['nullable', 'string', 'max:20'],
@@ -112,6 +118,12 @@ class LeadController extends Controller
             if ($value === '' && ! in_array($key, ['student_name', 'phone'], true)) {
                 unset($data[$key]);
             }
+        }
+
+        $data['capture_qualification'] = $data['capture_qualification'] ?? 'qualified';
+        if ($data['capture_qualification'] === 'not_qualified') {
+            $name = isset($data['student_name']) ? trim((string) $data['student_name']) : '';
+            $data['student_name'] = $name === '' ? null : $name;
         }
 
         if (! empty($data['notes_html'])) {

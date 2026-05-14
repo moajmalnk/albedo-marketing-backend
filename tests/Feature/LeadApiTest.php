@@ -117,6 +117,7 @@ class LeadApiTest extends TestCase
             'generated_by_user_id' => $user->id,
             'course' => 'Foundation',
             'syllabus' => 'CBSE',
+            'capture_qualification' => 'qualified',
         ]);
     }
 
@@ -214,5 +215,57 @@ class LeadApiTest extends TestCase
         $row = $withInactive->firstWhere('id', $id);
         $this->assertIsArray($row);
         $this->assertFalse($row['is_active']);
+    }
+
+    public function test_lead_store_requires_student_name_when_qualified(): void
+    {
+        $user = $this->makeUser();
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/v1/leads', [
+            'capture_qualification' => 'qualified',
+            'phone' => '918887776665',
+        ])->assertStatus(422);
+    }
+
+    public function test_lead_store_not_qualified_allows_null_student_name(): void
+    {
+        $user = $this->makeUser();
+        Sanctum::actingAs($user);
+
+        $payload = [
+            'capture_qualification' => 'not_qualified',
+            'phone' => '917778889990',
+            'alternate_phone' => '917778889991',
+            'whatsapp' => '917778889990',
+            'email' => 'nq@example.com',
+            'already_enrolled' => false,
+            'state' => 'Kerala',
+            'city' => 'Kochi',
+            'country' => 'India',
+            'source_group' => 'influence',
+            'source_code' => 'NSF_014',
+            'campaign' => 'Influence Marketing',
+            'connected_by' => 'INBOUND_CALL',
+            'enquiry_at' => '2026-05-14T10:30:00Z',
+            'notes_html' => '<p>NQ</p>',
+            'generated_by_user_id' => $user->id,
+            'course' => 'Foundation',
+            'syllabus' => 'CBSE',
+        ];
+
+        $response = $this->postJson('/api/v1/leads', $payload);
+        $response->assertCreated()
+            ->assertJsonPath('capture_qualification', 'not_qualified')
+            ->assertJsonPath('phone', '917778889990');
+
+        $this->assertDatabaseHas('leads', [
+            'phone' => '917778889990',
+            'capture_qualification' => 'not_qualified',
+        ]);
+
+        $lead = Lead::query()->where('phone', '917778889990')->first();
+        $this->assertNotNull($lead);
+        $this->assertNull($lead->student_name);
     }
 }

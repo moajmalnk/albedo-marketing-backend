@@ -7,6 +7,8 @@
 --
 -- If `leads.course` / `leads.syllabus` are still ENUM and block new picklist values, run:
 --   backend/database/sql/patch_leads_course_syllabus_to_varchar.sql
+-- For capture qualification + nullable lead name (Create Lead form), run:
+--   backend/database/sql/patch_leads_capture_qualification.sql
 -- Fixes common 500s when migrations were never applied on production:
 --   - GET /api/v1/challenge-categories  → table `challenge_categories` missing
 --   - GET /api/v1/lead-form-options     → tables `lead_form_option_*` missing
