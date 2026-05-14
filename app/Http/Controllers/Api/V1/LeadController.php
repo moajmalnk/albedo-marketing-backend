@@ -7,6 +7,7 @@ use App\Models\Lead;
 use App\Models\LeadStage;
 use App\Models\LeadStageTransition;
 use App\Services\LeadService;
+use Database\Seeders\LeadStageSeeder;
 use Illuminate\Http\Request;
 
 class LeadController extends Controller
@@ -72,6 +73,11 @@ class LeadController extends Controller
     {
         $data = $request->validate(['stage_key' => ['required', 'string'], 'reason' => ['nullable', 'string']]);
         $targetStage = LeadStage::query()->where('key', $data['stage_key'])->first();
+        if (! $targetStage) {
+            // Production DBs often predate the expanded pipeline; upsert once then retry.
+            (new LeadStageSeeder)->run();
+            $targetStage = LeadStage::query()->where('key', $data['stage_key'])->first();
+        }
         if (! $targetStage) {
             return response()->json([
                 'message' => 'Unknown stage_key',
