@@ -40,7 +40,7 @@ class ExpenseController extends Controller
             'title' => ['required', 'string', 'max:160'],
             'amount' => ['required', 'numeric', 'min:0'],
             'spent_at' => ['required', 'date'],
-            'department' => ['nullable', 'string', 'max:80'],
+            'department' => ['nullable', 'string', 'max:120'],
             'reference' => ['nullable', 'string', 'max:80'],
             'notes' => ['nullable', 'string'],
         ]);
@@ -63,7 +63,7 @@ class ExpenseController extends Controller
             'title' => ['sometimes', 'required', 'string', 'max:160'],
             'amount' => ['sometimes', 'required', 'numeric', 'min:0'],
             'spent_at' => ['sometimes', 'required', 'date'],
-            'department' => ['nullable', 'string', 'max:80'],
+            'department' => ['nullable', 'string', 'max:120'],
             'reference' => ['nullable', 'string', 'max:80'],
             'notes' => ['nullable', 'string'],
         ]);

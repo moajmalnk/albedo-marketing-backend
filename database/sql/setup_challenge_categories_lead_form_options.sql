@@ -12,6 +12,7 @@
 -- Fixes common 500s when migrations were never applied on production:
 --   - GET /api/v1/challenge-categories  → table `challenge_categories` missing
 --   - GET /api/v1/lead-form-options     → tables `lead_form_option_*` missing
+--   - GET /api/v1/team-tips             → table `team_tips` missing → patch_team_tips_table.sql
 --
 -- Safe to re-run: uses IF NOT EXISTS / INSERT IGNORE where appropriate.
 -- Requires: MySQL 5.7.8+ / MariaDB 10.2+ (JSON column). InnoDB. Existing `users` table for FK on marketing_challenges.created_by.
@@ -71,6 +72,29 @@ CREATE TABLE IF NOT EXISTS `marketing_challenges` (
   PRIMARY KEY (`id`),
   KEY `marketing_challenges_created_by_foreign` (`created_by`),
   CONSTRAINT `marketing_challenges_created_by_foreign`
+    FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- 2b) Team tips (Tips / GET /api/v1/team-tips)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `team_tips` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `title` VARCHAR(191) NOT NULL,
+  `description` TEXT NOT NULL,
+  `sent_to` JSON NOT NULL,
+  `sent_by` VARCHAR(120) NOT NULL,
+  `sent_by_role` VARCHAR(64) NULL DEFAULT NULL,
+  `date_sent` DATE NOT NULL,
+  `status` VARCHAR(16) NOT NULL DEFAULT 'Active',
+  `priority` VARCHAR(16) NULL DEFAULT NULL,
+  `read_count` INT UNSIGNED NOT NULL DEFAULT 0,
+  `created_by` BIGINT UNSIGNED NULL DEFAULT NULL,
+  `created_at` TIMESTAMP NULL DEFAULT NULL,
+  `updated_at` TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `team_tips_created_by_foreign` (`created_by`),
+  CONSTRAINT `team_tips_created_by_foreign`
     FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -272,6 +296,7 @@ ON DUPLICATE KEY UPDATE `label` = VALUES(`label`), `sort_order` = VALUES(`sort_o
 -- =============================================================================
 -- Done. Verify:
 --   SELECT COUNT(*) FROM challenge_categories;
+--   SELECT COUNT(*) FROM team_tips;
 --   SELECT slug, COUNT(*) FROM lead_form_options o JOIN lead_form_option_groups g ON g.id=o.group_id GROUP BY g.slug;
 -- =============================================================================
 

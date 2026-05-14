@@ -32,8 +32,6 @@ class DepartmentController extends Controller
 
     public function index(Request $request)
     {
-        $this->ensureCanListDepartments($request);
-
         $departments = Department::query()
             ->withCount('users')
             ->orderBy('name')
