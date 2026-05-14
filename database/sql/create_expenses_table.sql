@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS `expenses` (
     `category_id` BIGINT UNSIGNED NULL DEFAULT NULL,
     `title` VARCHAR(160) NOT NULL,
     `amount` DECIMAL(12, 2) NOT NULL,
-    `spent_at` DATE NOT NULL,
+    `spent_at` DATE NOT NULL,   
     `department` VARCHAR(80) NULL DEFAULT NULL,
     `reference` VARCHAR(80) NULL DEFAULT NULL,
     `notes` TEXT NULL,
