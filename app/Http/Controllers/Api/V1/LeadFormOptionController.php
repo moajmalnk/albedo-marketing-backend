@@ -21,16 +21,30 @@ class LeadFormOptionController extends Controller
     }
 
     /**
-     * Grouped picklists for the lead capture form (active options only).
+     * Grouped picklists for the lead capture form.
      *
-     * @return \Illuminate\Http\JsonResponse<string, array<int, array{id:int,value:string,label:string,sort_order:int,meta?:array|null}>>
+     * Default: **active options only** (for Add Lead and similar capture UIs).
+     * When `include_inactive=1` is passed, returns all options per group (including inactive)
+     * for Settings CRUD — requires the same role as mutating routes (`super_admin` / `admin`).
+     *
+     * @return \Illuminate\Http\JsonResponse<string, array<int, array{id:int,value:string,label:string,sort_order:int,is_active?:bool,meta?:array|null}>>
      */
     public function index(Request $request)
     {
+        $includeInactive = $request->boolean('include_inactive');
+        if ($includeInactive) {
+            $this->ensureSettingsAdmin($request);
+        }
+
         $request->user()?->loadMissing('role');
 
         $groups = LeadFormOptionGroup::query()
-            ->with(['options' => fn ($q) => $q->where('is_active', true)->orderBy('sort_order')->orderBy('id')])
+            ->with([
+                'options' => fn ($q) => $q
+                    ->when(! $includeInactive, fn ($q2) => $q2->where('is_active', true))
+                    ->orderBy('sort_order')
+                    ->orderBy('id'),
+            ])
             ->orderBy('slug')
             ->get();
 

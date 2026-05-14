@@ -81,6 +81,47 @@ class LeadFormOptionSeeder extends Seeder
                     ['Bengaluru', 'Bengaluru', 40],
                 ],
             ],
+            'course' => [
+                'label' => 'Course',
+                'options' => [
+                    ['Foundation', 'Foundation', 10],
+                    ['Academics', 'Academics', 20],
+                    ['Crash', 'Crash', 30],
+                    ['Repeater', 'Repeater', 40],
+                    ['Other', 'Other', 50],
+                    ['A_PLUS_CAMPUS_CBSE', 'A+ Campus CBSE', 60],
+                    ['A_PLUS_CAMPUS', 'A+ Campus', 70],
+                    ['ONLINE_SCHOOL', 'Online School', 80],
+                    ['LP_UP', 'LP & UP', 90],
+                    ['ESPEAK', 'Espeak', 100],
+                    ['PENCIL_FOUNDATION', 'Pencil Foundation', 110],
+                    ['FOUNDATION_PLUS_ACADEMICS', 'Foundation + Academics', 120],
+                    ['BATCH', 'Batch', 130],
+                ],
+            ],
+            'subject' => [
+                'label' => 'Subject',
+                'options' => [
+                    ['MATHS', 'Maths', 10],
+                    ['SCIENCE', 'Science', 20],
+                    ['ENGLISH', 'English', 30],
+                    ['SOCIAL_SCIENCE', 'Social Science', 40],
+                    ['PHYSICS', 'Physics', 50],
+                    ['CHEMISTRY', 'Chemistry', 60],
+                    ['BIOLOGY', 'Biology', 70],
+                    ['ALL_SUBJECTS', 'All Subjects', 80],
+                ],
+            ],
+            'syllabus' => [
+                'label' => 'Syllabus',
+                'options' => [
+                    ['STATE', 'State Board', 10],
+                    ['CBSE', 'CBSE', 20],
+                    ['ICSE', 'ICSE', 30],
+                    ['IGCSE', 'IGCSE', 40],
+                    ['IB', 'IB', 50],
+                ],
+            ],
         ];
 
         foreach ($defs as $slug => $cfg) {

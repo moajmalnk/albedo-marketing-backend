@@ -66,6 +66,9 @@ class LeadApiTest extends TestCase
             ],
             'source_name',
             'source_code',
+            'course',
+            'subject',
+            'syllabus',
         ]);
         $this->assertNotEmpty($response->json('connected_by'));
     }
@@ -112,6 +115,8 @@ class LeadApiTest extends TestCase
             'connected_by' => 'INBOUND_CALL',
             'children_count' => 2,
             'generated_by_user_id' => $user->id,
+            'course' => 'Foundation',
+            'syllabus' => 'CBSE',
         ]);
     }
 
@@ -143,5 +148,71 @@ class LeadApiTest extends TestCase
             'value' => 'CUSTOM_X',
             'label' => 'Custom',
         ])->assertForbidden();
+    }
+
+    public function test_lead_store_rejects_unknown_course_when_picklist_seeded(): void
+    {
+        $this->seed(LeadFormOptionSeeder::class);
+        $user = $this->makeUser();
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/v1/leads', [
+            'student_name' => 'Bad Course',
+            'phone' => '919887766554',
+            'course' => 'NOT_A_VALID_COURSE_SLUG',
+        ])->assertStatus(422);
+    }
+
+    public function test_lead_store_accepts_programme_picklist_values_when_seeded(): void
+    {
+        $this->seed(LeadFormOptionSeeder::class);
+        $user = $this->makeUser();
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/v1/leads', [
+            'student_name' => 'Programme Lead',
+            'phone' => '919776655443',
+            'course' => 'A_PLUS_CAMPUS_CBSE',
+            'syllabus' => 'STATE',
+            'subjects' => ['MATHS', 'PHYSICS'],
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('leads', [
+            'student_name' => 'Programme Lead',
+            'phone' => '919776655443',
+            'course' => 'A_PLUS_CAMPUS_CBSE',
+            'syllabus' => 'STATE',
+        ]);
+    }
+
+    public function test_lead_form_options_include_inactive_requires_admin(): void
+    {
+        $this->seed(LeadFormOptionSeeder::class);
+        $user = $this->makeUser('marketer');
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/v1/lead-form-options?include_inactive=1')->assertForbidden();
+    }
+
+    public function test_lead_form_options_include_inactive_returns_deactivated_rows(): void
+    {
+        $this->seed(LeadFormOptionSeeder::class);
+        $user = $this->makeUser('admin');
+        Sanctum::actingAs($user);
+
+        $first = collect($this->getJson('/api/v1/lead-form-options')->json('connected_by'))->first();
+        $this->assertIsArray($first);
+        $this->assertArrayHasKey('id', $first);
+        $id = (int) $first['id'];
+
+        $this->patchJson("/api/v1/lead-form-options/{$id}", ['is_active' => false])->assertOk();
+
+        $activeOnly = collect($this->getJson('/api/v1/lead-form-options')->json('connected_by'));
+        $this->assertNull($activeOnly->firstWhere('id', $id));
+
+        $withInactive = collect($this->getJson('/api/v1/lead-form-options?include_inactive=1')->json('connected_by'));
+        $row = $withInactive->firstWhere('id', $id);
+        $this->assertIsArray($row);
+        $this->assertFalse($row['is_active']);
     }
 }

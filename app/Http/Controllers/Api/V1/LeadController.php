@@ -7,12 +7,41 @@ use App\Models\Lead;
 use App\Models\LeadStage;
 use App\Models\LeadStageTransition;
 use App\Services\LeadService;
+use App\Support\LeadFormPicklist;
 use Database\Seeders\LeadStageSeeder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class LeadController extends Controller
 {
+    /**
+     * @return list<\Illuminate\Contracts\Validation\Rule|string>
+     */
+    private function picklistValueRules(string $groupSlug, int $maxLen = 191): array
+    {
+        $allowed = LeadFormPicklist::activeValuesForSlug($groupSlug);
+        $rules = ['nullable', 'string', 'max:'.$maxLen];
+        if ($allowed !== []) {
+            $rules[] = Rule::in($allowed);
+        }
+
+        return $rules;
+    }
+
+    /**
+     * @return list<\Illuminate\Contracts\Validation\Rule|string>
+     */
+    private function picklistArrayItemRules(string $groupSlug, int $maxLen): array
+    {
+        $allowed = LeadFormPicklist::activeValuesForSlug($groupSlug);
+        $rules = ['string', 'max:'.$maxLen];
+        if ($allowed !== []) {
+            $rules[] = Rule::in($allowed);
+        }
+
+        return $rules;
+    }
+
     public function index(Request $request)
     {
         $query = Lead::query()->with(['stage', 'owner']);
@@ -54,10 +83,10 @@ class LeadController extends Controller
             'parent_name' => ['nullable', 'string', 'max:160'],
             'parent_relation' => ['nullable', 'string', Rule::in(['father', 'mother', 'guardian'])],
             'class' => ['nullable', 'string', 'max:20'],
-            'syllabus' => ['nullable', 'string', Rule::in(['STATE', 'CBSE', 'ICSE', 'IGCSE', 'IB'])],
-            'course' => ['nullable', 'string', Rule::in(['Foundation', 'Academics', 'Crash', 'Repeater', 'Other'])],
+            'syllabus' => $this->picklistValueRules('syllabus'),
+            'course' => $this->picklistValueRules('course'),
             'subjects' => ['nullable', 'array'],
-            'subjects.*' => ['string', 'max:120'],
+            'subjects.*' => $this->picklistArrayItemRules('subject', 120),
             'school' => ['nullable', 'string', 'max:160'],
             'city' => ['nullable', 'string', 'max:80'],
             'district' => ['nullable', 'string', 'max:80'],
