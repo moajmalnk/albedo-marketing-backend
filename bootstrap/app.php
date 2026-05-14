@@ -4,11 +4,11 @@ use App\Http\Middleware\CorsStrict;
 use App\Http\Middleware\ForceHttps;
 use App\Http\Middleware\LeadershipOverride;
 use App\Http\Middleware\RequireActiveCheckIn;
+use App\Http\Middleware\SkipStatefulSanctumWhenBearerToken;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Validation\ValidationException;
-use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -36,7 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
             CorsStrict::class,
         ]);
 
-        $middleware->prependToGroup('api', EnsureFrontendRequestsAreStateful::class);
+        $middleware->prependToGroup('api', SkipStatefulSanctumWhenBearerToken::class);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->render(function (ValidationException $e) {
