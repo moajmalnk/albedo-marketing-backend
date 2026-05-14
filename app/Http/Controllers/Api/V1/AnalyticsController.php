@@ -47,7 +47,7 @@ class AnalyticsController extends Controller
     private function assertMarketingDashboardRole(Request $request): void
     {
         $key = $request->user()?->role?->key;
-        if (! in_array($key, ['super_admin', 'admin', 'dept_head'], true)) {
+        if (! in_array($key, ['super_admin', 'admin', 'dept_head', 'department_head'], true)) {
             abort(403);
         }
     }

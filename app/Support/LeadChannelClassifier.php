@@ -64,22 +64,22 @@ class LeadChannelClassifier
         $query->where(function (Builder $q) use ($channel) {
             match ($channel) {
                 self::WHATSAPP => $q->whereNotNull('whatsapp_id')
-                    ->orWhereRaw('LOWER(COALESCE(source_code, "")) LIKE ?', ['%whatsapp%'])
+                    ->orWhereRaw('LOWER(COALESCE(source_code, \'\')) LIKE ?', ['%whatsapp%'])
                     ->orWhere('source_code', 'whatsapp'),
-                self::CALL => $q->whereRaw('LOWER(COALESCE(connected_by, "")) LIKE ?', ['%call%'])
-                    ->orWhereRaw('LOWER(COALESCE(source_code, "")) LIKE ?', ['%call%']),
-                self::MESSAGE => $q->whereRaw('LOWER(COALESCE(source_code, "")) LIKE ?', ['%message%'])
-                    ->orWhereRaw('LOWER(COALESCE(source_code, "")) LIKE ?', ['%sms%'])
-                    ->orWhereRaw('LOWER(COALESCE(connected_by, "")) LIKE ?', ['%message%']),
+                self::CALL => $q->whereRaw('LOWER(COALESCE(connected_by, \'\')) LIKE ?', ['%call%'])
+                    ->orWhereRaw('LOWER(COALESCE(source_code, \'\')) LIKE ?', ['%call%']),
+                self::MESSAGE => $q->whereRaw('LOWER(COALESCE(source_code, \'\')) LIKE ?', ['%message%'])
+                    ->orWhereRaw('LOWER(COALESCE(source_code, \'\')) LIKE ?', ['%sms%'])
+                    ->orWhereRaw('LOWER(COALESCE(connected_by, \'\')) LIKE ?', ['%message%']),
                 self::FORM => $q->whereNull('whatsapp_id')
-                    ->whereRaw('NOT (LOWER(COALESCE(source_code, "")) LIKE ?)', ['%whatsapp%'])
+                    ->whereRaw('NOT (LOWER(COALESCE(source_code, \'\')) LIKE ?)', ['%whatsapp%'])
                     ->where('source_code', '<>', 'whatsapp')
                     ->where(function (Builder $inner) {
                         $inner->whereNull('connected_by')->orWhereRaw('LOWER(connected_by) NOT LIKE ?', ['%call%']);
                     })
-                    ->whereRaw('LOWER(COALESCE(source_code, "")) NOT LIKE ?', ['%call%'])
-                    ->whereRaw('LOWER(COALESCE(source_code, "")) NOT LIKE ?', ['%message%'])
-                    ->whereRaw('LOWER(COALESCE(source_code, "")) NOT LIKE ?', ['%sms%']),
+                    ->whereRaw('LOWER(COALESCE(source_code, \'\')) NOT LIKE ?', ['%call%'])
+                    ->whereRaw('LOWER(COALESCE(source_code, \'\')) NOT LIKE ?', ['%message%'])
+                    ->whereRaw('LOWER(COALESCE(source_code, \'\')) NOT LIKE ?', ['%sms%']),
                 default => $q->whereRaw('1 = 1'),
             };
         });

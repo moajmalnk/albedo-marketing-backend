@@ -59,13 +59,13 @@ class MarketingAnalyticsService
         $platform = $request->input('platform');
         if ($platform === 'Meta') {
             $query->where(function (Builder $q) {
-                $q->whereRaw('LOWER(COALESCE(campaign, "")) LIKE ?', ['%meta%'])
-                    ->orWhereRaw('LOWER(COALESCE(source_code, "")) LIKE ?', ['%meta%']);
+                $q->whereRaw('LOWER(COALESCE(campaign, \'\')) LIKE ?', ['%meta%'])
+                    ->orWhereRaw('LOWER(COALESCE(source_code, \'\')) LIKE ?', ['%meta%']);
             });
         } elseif ($platform === 'Google') {
             $query->where(function (Builder $q) {
-                $q->whereRaw('LOWER(COALESCE(campaign, "")) LIKE ?', ['%google%'])
-                    ->orWhereRaw('LOWER(COALESCE(source_code, "")) LIKE ?', ['%google%']);
+                $q->whereRaw('LOWER(COALESCE(campaign, \'\')) LIKE ?', ['%google%'])
+                    ->orWhereRaw('LOWER(COALESCE(source_code, \'\')) LIKE ?', ['%google%']);
             });
         } elseif ($platform === 'Website') {
             $query->where(function (Builder $q) {
@@ -104,7 +104,7 @@ class MarketingAnalyticsService
         if ($user && $user->relationLoaded('role') === false) {
             $user->load('role');
         }
-        if ($user?->role?->key === 'dept_head' && ! $request->filled('marketing_team')) {
+        if (in_array($user?->role?->key, ['dept_head', 'department_head'], true) && ! $request->filled('marketing_team')) {
             $dept = $user->department;
             if ($dept === 'PM') {
                 $query->where('source_group', 'performance');
@@ -380,7 +380,7 @@ class MarketingAnalyticsService
     {
         $qualifiedKeys = config('marketing.qualified_stage_keys', ['enrolled', 'itb']);
         $rows = (clone $base)
-            ->selectRaw('COALESCE(NULLIF(TRIM(source_code), ""), "unknown") as src')
+            ->selectRaw('COALESCE(NULLIF(TRIM(source_code), \'\'), \'unknown\') as src')
             ->selectRaw('COUNT(*) as c')
             ->groupBy('src')
             ->orderByDesc('c')
@@ -391,7 +391,7 @@ class MarketingAnalyticsService
         foreach ($rows as $row) {
             $src = (string) $row->src;
             $leads = (int) $row->c;
-            $qualified = (int) (clone $base)->whereRaw('COALESCE(NULLIF(TRIM(source_code), ""), "unknown") = ?', [$src])
+            $qualified = (int) (clone $base)->whereRaw('COALESCE(NULLIF(TRIM(source_code), \'\'), \'unknown\') = ?', [$src])
                 ->whereHas('stage', fn (Builder $q) => $q->whereIn('key', $qualifiedKeys))
                 ->count();
             $rate = $leads > 0 ? (int) round(($qualified / $leads) * 100) : 0;

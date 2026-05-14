@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Department;
 use App\Models\MarketingChallenge;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -12,8 +13,6 @@ class MarketingChallengeController extends Controller
 {
     private const STATUSES = ['Open', 'In Progress', 'Resolved'];
 
-    private const DEPARTMENTS = ['Performance Marketing', 'Influence Marketing'];
-
     private function reporterDisplayName(User $user): string
     {
         $n = trim(($user->first_name ?? '').' '.($user->last_name ?? ''));
@@ -21,20 +20,26 @@ class MarketingChallengeController extends Controller
         return $n !== '' ? $n : ($user->email ?? 'Unknown');
     }
 
-    /** Normalize legacy department codes to full labels used in challenges. */
+    /** Resolve user department string to an active department name used on challenges. */
     private function normalizeDepartment(?string $raw): ?string
     {
         if ($raw === null || $raw === '') {
             return null;
         }
         $t = trim($raw);
-        if (in_array($t, self::DEPARTMENTS, true)) {
-            return $t;
+        $active = Department::query()->where('status', 'active');
+        $byName = (clone $active)->where('name', $t)->value('name');
+        if ($byName !== null) {
+            return $byName;
+        }
+        $byCode = (clone $active)->whereRaw('UPPER(code) = ?', [strtoupper($t)])->value('name');
+        if ($byCode !== null) {
+            return $byCode;
         }
 
         return match (strtoupper($t)) {
-            'PM' => 'Performance Marketing',
-            'IM' => 'Influence Marketing',
+            'PM' => (clone $active)->whereRaw('UPPER(code) = ?', ['PM'])->value('name') ?? 'Performance Marketing',
+            'IM' => (clone $active)->whereRaw('UPPER(code) = ?', ['IM'])->value('name') ?? 'Influence Marketing',
             default => $t,
         };
     }
@@ -81,7 +86,12 @@ class MarketingChallengeController extends Controller
         $data = $request->validate([
             'category' => ['required', 'string', 'max:191'],
             'description' => ['required', 'string', 'max:20000'],
-            'department' => ['required', 'string', Rule::in(self::DEPARTMENTS)],
+            'department' => [
+                'required',
+                'string',
+                'max:64',
+                Rule::exists('departments', 'name')->where(fn ($q) => $q->where('status', 'active')),
+            ],
             'reported_by' => ['nullable', 'string', 'max:120'],
             'affected_leads' => ['nullable', 'array', 'max:500'],
             'affected_leads.*' => ['string', 'max:64'],
@@ -132,7 +142,13 @@ class MarketingChallengeController extends Controller
         $data = $request->validate([
             'category' => ['sometimes', 'required', 'string', 'max:191'],
             'description' => ['sometimes', 'required', 'string', 'max:20000'],
-            'department' => ['sometimes', 'required', 'string', Rule::in(self::DEPARTMENTS)],
+            'department' => [
+                'sometimes',
+                'required',
+                'string',
+                'max:64',
+                Rule::exists('departments', 'name')->where(fn ($q) => $q->where('status', 'active')),
+            ],
             'reported_by' => ['sometimes', 'nullable', 'string', 'max:120'],
             'affected_leads' => ['sometimes', 'nullable', 'array', 'max:500'],
             'affected_leads.*' => ['string', 'max:64'],

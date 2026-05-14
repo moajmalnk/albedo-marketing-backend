@@ -4,11 +4,24 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\ChallengeCategory;
+use App\Models\Department;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class ChallengeCategoryController extends Controller
 {
+    /** @return list<string> */
+    private function allowedChallengeCategoryDepartments(): array
+    {
+        $names = Department::query()
+            ->where('status', 'active')
+            ->orderBy('name')
+            ->pluck('name')
+            ->all();
+
+        return array_values(array_unique(array_merge(['Both'], $names)));
+    }
+
     private function ensureSettingsAdmin(Request $request): void
     {
         $actor = $request->user()?->loadMissing('role');
@@ -44,7 +57,7 @@ class ChallengeCategoryController extends Controller
                     fn ($q) => $q->where('department', $request->input('department'))
                 ),
             ],
-            'department' => ['required', 'string', Rule::in(['Performance Marketing', 'Influence Marketing', 'Both'])],
+            'department' => ['required', 'string', 'max:64', Rule::in($this->allowedChallengeCategoryDepartments())],
             'status' => ['nullable', 'string', Rule::in(['Active', 'Deactivated'])],
         ]);
 
@@ -73,7 +86,7 @@ class ChallengeCategoryController extends Controller
                     ->where(fn ($q) => $q->where('department', $deptForUnique))
                     ->ignore($challenge_category->id),
             ],
-            'department' => ['sometimes', 'required', 'string', Rule::in(['Performance Marketing', 'Influence Marketing', 'Both'])],
+            'department' => ['sometimes', 'required', 'string', 'max:64', Rule::in($this->allowedChallengeCategoryDepartments())],
             'status' => ['sometimes', 'string', Rule::in(['Active', 'Deactivated'])],
         ]);
 

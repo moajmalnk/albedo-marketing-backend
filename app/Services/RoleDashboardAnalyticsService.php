@@ -29,7 +29,7 @@ class RoleDashboardAnalyticsService
         if ($key === 'marketer') {
             return $this->marketer($user);
         }
-        if ($key === 'dept_head') {
+        if (in_array($key, ['dept_head', 'department_head'], true)) {
             return $this->deptHead($user, $request);
         }
         if (in_array($key, ['sales_head', 'psa', 'advisor'], true)) {
@@ -83,12 +83,12 @@ class RoleDashboardAnalyticsService
         $qualifiedKeys = config('marketing.qualified_stage_keys', ['enrolled', 'itb']);
         $qualified = (int) (clone $base)->whereHas('stage', fn (Builder $q) => $q->whereIn('key', $qualifiedKeys))->count();
         $meta = (int) (clone $base)->where(function (Builder $q) {
-            $q->whereRaw('LOWER(COALESCE(campaign, "")) LIKE ?', ['%meta%'])
-                ->orWhereRaw('LOWER(COALESCE(source_code, "")) LIKE ?', ['%meta%']);
+            $q->whereRaw('LOWER(COALESCE(campaign, \'\')) LIKE ?', ['%meta%'])
+                ->orWhereRaw('LOWER(COALESCE(source_code, \'\')) LIKE ?', ['%meta%']);
         })->count();
         $google = (int) (clone $base)->where(function (Builder $q) {
-            $q->whereRaw('LOWER(COALESCE(campaign, "")) LIKE ?', ['%google%'])
-                ->orWhereRaw('LOWER(COALESCE(source_code, "")) LIKE ?', ['%google%']);
+            $q->whereRaw('LOWER(COALESCE(campaign, \'\')) LIKE ?', ['%google%'])
+                ->orWhereRaw('LOWER(COALESCE(source_code, \'\')) LIKE ?', ['%google%']);
         })->count();
 
         $dailyVolume = [];
