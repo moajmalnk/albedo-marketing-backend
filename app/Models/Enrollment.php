@@ -57,4 +57,54 @@ class Enrollment extends Model
     {
         return $this->hasMany(Payment::class);
     }
+
+    /**
+     * If spot_amount exceeds recorded payments (e.g. opening DP on create),
+     * insert a payment for the gap so totals stay payment-ledger based.
+     */
+    public function ensureOpeningPayment(?int $receivedBy = null): ?Payment
+    {
+        $existingPaid = (float) $this->payments()->sum('amount');
+        $orphan = round((float) $this->spot_amount - $existingPaid, 2);
+        if ($orphan <= 0) {
+            return null;
+        }
+
+        $receiverId = $receivedBy ?? auth()->id();
+        if (! $receiverId) {
+            return null;
+        }
+
+        $method = $this->payment_method;
+        if (! in_array($method, ['cash', 'upi', 'card', 'bank_transfer', 'emi'], true)) {
+            $method = 'upi';
+        }
+
+        return $this->payments()->create([
+            'amount' => $orphan,
+            'method' => $method,
+            'reference' => 'Initial spot / DP',
+            'received_at' => $this->confirmed_at ?? $this->created_at ?? now(),
+            'received_by' => $receiverId,
+        ]);
+    }
+
+    /** Recompute spot_amount / balance_amount / admission_status from payment rows. */
+    public function syncAmountsFromPayments(): void
+    {
+        $totalPaid = round((float) $this->payments()->sum('amount'), 2);
+        $balance = max(0, round((float) $this->package_amount - $totalPaid, 2));
+        $status = $this->admission_status;
+        if ($balance <= 0) {
+            $status = 'full';
+        } elseif ($status === 'full') {
+            $status = 'partial';
+        }
+
+        $this->update([
+            'spot_amount' => $totalPaid,
+            'balance_amount' => $balance,
+            'admission_status' => $status,
+        ]);
+    }
 }

@@ -332,6 +332,68 @@ class LeadApiTest extends TestCase
         $this->assertNull($lead->student_name);
     }
 
+    public function test_sales_head_create_defaults_to_qualified_stage(): void
+    {
+        $qualified = LeadStage::query()->where('key', 'qualified')->firstOrFail();
+        $user = $this->makeUser('sales_head');
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson('/api/v1/leads', [
+            'student_name' => 'Sales Head Direct',
+            'phone' => '915551112233',
+            'assigned_dept' => 'SALES',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('stage.key', 'qualified')
+            ->assertJsonPath('stage_id', $qualified->id)
+            ->assertJsonPath('status', $qualified->legacy_status ?? 'Qualified');
+    }
+
+    public function test_admin_create_defaults_to_new_lead_stage(): void
+    {
+        $new = LeadStage::query()->where('key', 'new_lead')->firstOrFail();
+        $user = $this->makeUser('admin');
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson('/api/v1/leads', [
+            'student_name' => 'Admin Created',
+            'phone' => '915554445566',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('stage.key', 'new_lead')
+            ->assertJsonPath('stage_id', $new->id);
+    }
+
+    public function test_sales_head_can_list_qualified_leads(): void
+    {
+        $qualified = LeadStage::query()->where('key', 'qualified')->firstOrFail();
+        $new = LeadStage::query()->where('key', 'new_lead')->firstOrFail();
+        $user = $this->makeUser('sales_head');
+
+        Lead::query()->create([
+            'student_name' => 'VisibleQualified',
+            'phone' => '915550001111',
+            'stage_id' => $qualified->id,
+            'status' => 'Qualified',
+        ]);
+        Lead::query()->create([
+            'student_name' => 'HiddenNewLead',
+            'phone' => '915550002222',
+            'stage_id' => $new->id,
+            'status' => 'New',
+        ]);
+
+        Sanctum::actingAs($user);
+        $response = $this->getJson('/api/v1/leads?limit=50');
+        $response->assertOk();
+
+        $names = array_column($response->json('data') ?? [], 'student_name');
+        $this->assertContains('VisibleQualified', $names);
+        $this->assertNotContains('HiddenNewLead', $names);
+    }
+
     public function test_lead_history_returns_audit_and_activity_timeline(): void
     {
         $new = LeadStage::query()->where('key', 'new_lead')->firstOrFail();

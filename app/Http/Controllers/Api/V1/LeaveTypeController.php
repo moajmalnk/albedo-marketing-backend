@@ -17,7 +17,7 @@ class LeaveTypeController extends Controller
 
     public function store(Request $request)
     {
-        if (!auth()->user()->hasRole(['super_admin', 'admin'])) {
+        if (! auth()->user()?->isSuperAdmin() && ! auth()->user()?->isAdmin()) {
             abort(403);
         }
 
@@ -34,7 +34,7 @@ class LeaveTypeController extends Controller
 
     public function update(Request $request, LeaveType $leaveType)
     {
-        if (!auth()->user()->hasRole(['super_admin', 'admin'])) {
+        if (! auth()->user()?->isSuperAdmin() && ! auth()->user()?->isAdmin()) {
             abort(403);
         }
 
@@ -51,7 +51,7 @@ class LeaveTypeController extends Controller
 
     public function destroy(LeaveType $leaveType)
     {
-        if (!auth()->user()->hasRole(['super_admin', 'admin'])) {
+        if (! auth()->user()?->isSuperAdmin() && ! auth()->user()?->isAdmin()) {
             abort(403);
         }
 

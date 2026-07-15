@@ -25,7 +25,7 @@ class HolidayController extends Controller
 
     public function store(Request $request)
     {
-        if (!auth()->user()->hasRole(['super_admin', 'admin'])) {
+        if (! auth()->user()?->isSuperAdmin() && ! auth()->user()?->isAdmin()) {
             abort(403);
         }
 
@@ -42,7 +42,7 @@ class HolidayController extends Controller
 
     public function update(Request $request, Holiday $holiday)
     {
-        if (!auth()->user()->hasRole(['super_admin', 'admin'])) {
+        if (! auth()->user()?->isSuperAdmin() && ! auth()->user()?->isAdmin()) {
             abort(403);
         }
 
@@ -59,7 +59,7 @@ class HolidayController extends Controller
 
     public function destroy(Holiday $holiday)
     {
-        if (!auth()->user()->hasRole(['super_admin', 'admin'])) {
+        if (! auth()->user()?->isSuperAdmin() && ! auth()->user()?->isAdmin()) {
             abort(403);
         }
 

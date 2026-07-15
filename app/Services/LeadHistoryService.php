@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AuditLog;
 use App\Models\Lead;
 use App\Models\LeadActivity;
+use App\Models\LeadAssignment;
 use App\Models\LeadStage;
 use App\Models\LeadStageTransition;
 use Illuminate\Support\Carbon;
@@ -52,6 +53,13 @@ class LeadHistoryService
             ->limit($perSourceLimit)
             ->get();
 
+        $assignments = LeadAssignment::query()
+            ->with(['assignedBy.role', 'previousOwner', 'newOwner'])
+            ->where('lead_id', $leadId)
+            ->orderByDesc('created_at')
+            ->limit($perSourceLimit)
+            ->get();
+
         $rows = collect();
         $auditedTransitionIds = collect();
 
@@ -70,6 +78,10 @@ class LeadHistoryService
 
         foreach ($activities as $activity) {
             $rows->push($this->formatActivityRow($activity));
+        }
+
+        foreach ($assignments as $assignment) {
+            $rows->push($this->formatAssignmentRow($assignment));
         }
 
         $sorted = $rows
@@ -173,6 +185,48 @@ class LeadHistoryService
             'comments' => $activity->comments,
             'payload' => $activity->payload,
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatAssignmentRow(LeadAssignment $assignment): array
+    {
+        $occurredAt = $assignment->created_at instanceof Carbon
+            ? $assignment->created_at->toIso8601String()
+            : (string) $assignment->created_at;
+
+        $from = $this->ownerDisplayName($assignment->previousOwner);
+        $to = $this->ownerDisplayName($assignment->newOwner);
+        $type = $assignment->assignment_type ?: 'Assignment';
+        $reason = $assignment->reason ? ' Reason: '.$assignment->reason : '';
+
+        return [
+            'id' => 'assignment-'.$assignment->id,
+            'kind' => 'assignment',
+            'occurred_at' => $occurredAt,
+            'action' => 'lead.assignment',
+            'title' => $type,
+            'description' => "Owner: {$from} -> {$to}.{$reason}",
+            'actor' => $this->serializeActor($assignment->assignedBy),
+            'payload' => [
+                'previous_owner_id' => $assignment->previous_owner_id,
+                'new_owner_id' => $assignment->new_owner_id,
+                'assignment_type' => $assignment->assignment_type,
+                'reason' => $assignment->reason,
+            ],
+        ];
+    }
+
+    private function ownerDisplayName(?\App\Models\User $user): string
+    {
+        if ($user === null) {
+            return 'Unassigned';
+        }
+
+        $name = trim(implode(' ', array_filter([$user->first_name, $user->last_name])));
+
+        return $name !== '' ? $name : ($user->email ?: 'User #'.$user->id);
     }
 
     /**

@@ -188,7 +188,7 @@ class LeadStageSeeder extends Seeder
         if (Schema::hasTable('lead_stage_rules')) {
             $allowedLinearTransitions = [
                 'new_lead' => ['assigned_telecaller'],
-                'assigned_telecaller' => ['assigned_telecaller', 'qualified', 'closed_lost'],
+                'assigned_telecaller' => ['qualified', 'closed_lost'],
                 'qualified' => ['sales_head_review'],
                 'sales_head_review' => ['advisor_counselling', 'assigned_telecaller'],
                 'advisor_counselling' => ['enrolled', 'recovery_required', 'closed_lost'],
@@ -221,11 +221,17 @@ class LeadStageSeeder extends Seeder
                     $isSuperOrHead = in_array($role, ['super_admin', 'admin', 'sales_head', 'department_head'], true);
                     $isOwnerRole = ($stage->owner_role === $role);
 
+                    $canView = true;
+                    if ($role === 'sales_head') {
+                        // Include qualified (order 3) so sales-head-created / telecaller-handoff leads are listable.
+                        $canView = $stage->order >= 3;
+                    }
+
                     LeadStagePermission::query()->updateOrCreate([
                         'lead_stage_id' => $stage->id,
                         'role' => $role,
                     ], [
-                        'can_view' => true,
+                        'can_view' => $canView,
                         'can_move' => $isSuperOrHead || $isOwnerRole,
                         'can_override' => $isSuperOrHead,
                         'can_close' => $isSuperOrHead || $isOwnerRole,

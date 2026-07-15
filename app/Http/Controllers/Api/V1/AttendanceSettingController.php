@@ -5,20 +5,19 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceSetting;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 
 class AttendanceSettingController extends Controller
 {
     public function show()
     {
-        // Require super_admin or admin to view
-        if (!auth()->user()->hasRole(['super_admin', 'admin', 'department_head'])) {
+        $user = auth()->user();
+        if (! $user || ! ($user->isSuperAdmin() || $user->isAdmin() || $user->isDepartmentHead())) {
             abort(403);
         }
 
         $setting = AttendanceSetting::first();
 
-        if (!$setting) {
+        if (! $setting) {
             $setting = AttendanceSetting::create([
                 'office_start_time' => '09:00:00',
                 'office_end_time' => '18:00:00',
@@ -35,7 +34,8 @@ class AttendanceSettingController extends Controller
 
     public function update(Request $request)
     {
-        if (!auth()->user()->hasRole(['super_admin', 'admin'])) {
+        $user = auth()->user();
+        if (! $user || ! ($user->isSuperAdmin() || $user->isAdmin())) {
             abort(403);
         }
 
@@ -51,7 +51,7 @@ class AttendanceSettingController extends Controller
         ]);
 
         $setting = AttendanceSetting::first();
-        if (!$setting) {
+        if (! $setting) {
             $setting = new AttendanceSetting();
         }
 
