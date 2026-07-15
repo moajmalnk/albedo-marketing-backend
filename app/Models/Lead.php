@@ -26,7 +26,7 @@ class Lead extends Model
         'dnd', 'next_action_at', 'last_contacted_at', 'created_by', 'generated_by_user_id', 'deleted_by', 'updated_by',
         'assigned_by', 'assigned_at', 'assignment_notes',
         'notes_html', 'score', 'score_tier', 'score_last_calculated_at',
-        'assignment_status', 'routing_failed', 'psa_owner_id', 'advisor_owner_id', 'campaign_id',
+        'assignment_status', 'routing_failed', 'telecaller_owner_id', 'psa_owner_id', 'advisor_owner_id', 'campaign_id',
     ];
 
     public ?string $assignment_type = null;
@@ -116,6 +116,7 @@ class Lead extends Model
     public function closedReason(): BelongsTo { return $this->belongsTo(LeadClosedReason::class, 'closed_reason_id'); }
     public function closedBy(): BelongsTo { return $this->belongsTo(User::class, 'closed_by'); }
     public function owner(): BelongsTo { return $this->belongsTo(User::class, 'owner_id'); }
+    public function telecallerOwner(): BelongsTo { return $this->belongsTo(User::class, 'telecaller_owner_id'); }
     public function psaOwner(): BelongsTo { return $this->belongsTo(User::class, 'psa_owner_id'); }
     public function advisorOwner(): BelongsTo { return $this->belongsTo(User::class, 'advisor_owner_id'); }
     public function campaign(): BelongsTo { return $this->belongsTo(Campaign::class, 'campaign_id'); }

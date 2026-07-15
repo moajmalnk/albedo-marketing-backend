@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Lead;
 use App\Models\User;
 use App\Models\LeadAssignment;
+use App\Services\SalesOwnerAssignmentService;
 use Illuminate\Http\Request;
 
 class LeadAssignmentController extends Controller
@@ -93,7 +94,7 @@ class LeadAssignmentController extends Controller
         return response()->json($assignments);
     }
 
-    public function assign(Request $request, Lead $lead)
+    public function assign(Request $request, Lead $lead, SalesOwnerAssignmentService $salesOwnerService)
     {
         $request->validate([
             'owner_id' => ['nullable', 'integer', 'exists:users,id'],
@@ -103,39 +104,71 @@ class LeadAssignmentController extends Controller
         $ownerId = $request->input('owner_id');
 
         if ($ownerId) {
-            $telecaller = User::findOrFail($ownerId);
-            if ($request->user() && $request->user()->role === 'marketer') {
-                $telecaller->loadMissing('role');
-                if ($telecaller->role?->key !== 'telecaller') {
+            $owner = User::query()->with('role')->findOrFail($ownerId);
+            $ownerRole = $owner->role?->key;
+            $actor = $request->user();
+            $actor?->loadMissing('role');
+            $actorRole = $actor?->role?->key;
+
+            if ($actorRole === 'marketer') {
+                if ($ownerRole !== 'telecaller') {
                     return response()->json(['message' => 'MARKETER_CAN_ONLY_ASSIGN_TELECALLER'], 403);
                 }
+            }
+
+            if (in_array($ownerRole, SalesOwnerAssignmentService::ALLOWED_OWNER_ROLES, true)) {
+                try {
+                    $salesOwnerService->assertActorCanAssign($actor);
+                    $lead = $salesOwnerService->assignMany(
+                        [$lead->id],
+                        (int) $ownerId,
+                        $actor,
+                        $request->input('reason')
+                    )->first();
+                } catch (\InvalidArgumentException $e) {
+                    $status = str_contains($e->getMessage(), 'Only sales heads') ? 403 : 422;
+                    return response()->json(['message' => $e->getMessage()], $status);
+                }
+
+                return response()->json([
+                    'message' => 'LEAD_ASSIGN_SUCCESSFUL',
+                    'lead' => $lead,
+                ]);
             }
 
             $lead->assignment_type = 'Initial Assignment';
             $lead->assignment_reason = $request->input('reason') ?? 'Initial Telecaller Assignment';
 
-            $lead->update([
-                'owner_id' => $telecaller->id,
+            $update = [
+                'owner_id' => $owner->id,
                 'assignment_status' => 'assigned',
                 'routing_failed' => false,
-            ]);
+            ];
+            if ($ownerRole === 'telecaller') {
+                $update['telecaller_owner_id'] = $owner->id;
+            }
+
+            $lead->update($update);
         } else {
             $lead->assignment_type = 'Remove Telecaller Assignment';
             $lead->assignment_reason = $request->input('reason') ?? 'Removed Telecaller Assignment';
 
             $lead->update([
                 'owner_id' => null,
+                'telecaller_owner_id' => null,
+                'advisor_owner_id' => null,
+                'psa_owner_id' => null,
                 'assignment_status' => 'waiting',
             ]);
         }
 
         return response()->json([
             'message' => 'LEAD_ASSIGN_SUCCESSFUL',
-            'lead' => $lead->fresh(['owner', 'stage']),
+            'lead' => $lead->fresh(['owner', 'stage', 'telecallerOwner', 'psaOwner', 'advisorOwner']),
         ]);
     }
 
-    public function reassign(Request $request, Lead $lead)
+    public function reassign(Request $request, Lead $lead, SalesOwnerAssignmentService $salesOwnerService)
     {
         $request->validate([
             'owner_id' => ['nullable', 'integer', 'exists:users,id'],
@@ -145,35 +178,67 @@ class LeadAssignmentController extends Controller
         $ownerId = $request->input('owner_id');
 
         if ($ownerId) {
-            $telecaller = User::findOrFail($ownerId);
-            if ($request->user() && $request->user()->role === 'marketer') {
-                $telecaller->loadMissing('role');
-                if ($telecaller->role?->key !== 'telecaller') {
+            $owner = User::query()->with('role')->findOrFail($ownerId);
+            $ownerRole = $owner->role?->key;
+            $actor = $request->user();
+            $actor?->loadMissing('role');
+            $actorRole = $actor?->role?->key;
+
+            if ($actorRole === 'marketer') {
+                if ($ownerRole !== 'telecaller') {
                     return response()->json(['message' => 'MARKETER_CAN_ONLY_ASSIGN_TELECALLER'], 403);
                 }
+            }
+
+            if (in_array($ownerRole, SalesOwnerAssignmentService::ALLOWED_OWNER_ROLES, true)) {
+                try {
+                    $salesOwnerService->assertActorCanAssign($actor);
+                    $lead = $salesOwnerService->assignMany(
+                        [$lead->id],
+                        (int) $ownerId,
+                        $actor,
+                        $request->input('reason')
+                    )->first();
+                } catch (\InvalidArgumentException $e) {
+                    $status = str_contains($e->getMessage(), 'Only sales heads') ? 403 : 422;
+                    return response()->json(['message' => $e->getMessage()], $status);
+                }
+
+                return response()->json([
+                    'message' => 'LEAD_REASSIGN_SUCCESSFUL',
+                    'lead' => $lead,
+                ]);
             }
 
             $lead->assignment_type = 'Manual Reassignment';
             $lead->assignment_reason = $request->input('reason') ?? 'Manual Telecaller Reassignment';
 
-            $lead->update([
-                'owner_id' => $telecaller->id,
+            $update = [
+                'owner_id' => $owner->id,
                 'assignment_status' => 'assigned',
                 'routing_failed' => false,
-            ]);
+            ];
+            if ($ownerRole === 'telecaller') {
+                $update['telecaller_owner_id'] = $owner->id;
+            }
+
+            $lead->update($update);
         } else {
             $lead->assignment_type = 'Remove Telecaller Assignment';
             $lead->assignment_reason = $request->input('reason') ?? 'Removed Telecaller Assignment';
 
             $lead->update([
                 'owner_id' => null,
+                'telecaller_owner_id' => null,
+                'advisor_owner_id' => null,
+                'psa_owner_id' => null,
                 'assignment_status' => 'waiting',
             ]);
         }
 
         return response()->json([
             'message' => 'LEAD_REASSIGN_SUCCESSFUL',
-            'lead' => $lead->fresh(['owner', 'stage']),
+            'lead' => $lead->fresh(['owner', 'stage', 'telecallerOwner', 'psaOwner', 'advisorOwner']),
         ]);
     }
 }

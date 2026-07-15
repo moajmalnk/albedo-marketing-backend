@@ -7,7 +7,17 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Task extends Model
 {
-    protected $fillable = ['lead_id', 'assigned_to', 'title', 'description', 'status', 'due_at', 'completed_at'];
+    protected $fillable = [
+        'lead_id',
+        'assigned_to',
+        'assignee_role',
+        'created_by',
+        'title',
+        'description',
+        'status',
+        'due_at',
+        'completed_at',
+    ];
 
     protected function casts(): array
     {
@@ -22,5 +32,10 @@ class Task extends Model
     public function assignee(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

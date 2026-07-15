@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\DepartmentController;
 use App\Http\Controllers\Api\V1\EnrollmentController;
 use App\Http\Controllers\Api\V1\ExpenseController;
 use App\Http\Controllers\Api\V1\FinanceController;
+use App\Http\Controllers\Api\V1\CallLogController;
 use App\Http\Controllers\Api\V1\LeadActivityController;
 use App\Http\Controllers\Api\V1\LeadController;
 use App\Http\Controllers\Api\V1\LeadFormOptionController;
@@ -56,6 +57,7 @@ Route::prefix('v1')->group(function (): void {
 
         Route::get('/me', [UserController::class, 'me']);
         Route::patch('/me', [UserController::class, 'updateMe']);
+        Route::get('/user-targets/my-progress', [UserTargetController::class, 'myProgress']);
 
         Route::apiResource('lead-sources', \App\Http\Controllers\LeadSourceController::class)->except(['show']);
         
@@ -76,6 +78,13 @@ Route::prefix('v1')->group(function (): void {
         Route::post('lead-closed-reasons', [\App\Http\Controllers\Api\V1\LeadClosedReasonController::class, 'store']);
         Route::patch('lead-closed-reasons/{leadClosedReason}', [\App\Http\Controllers\Api\V1\LeadClosedReasonController::class, 'update']);
         Route::delete('lead-closed-reasons/{leadClosedReason}', [\App\Http\Controllers\Api\V1\LeadClosedReasonController::class, 'destroy']);
+
+        Route::get('lead-filter-sets', [\App\Http\Controllers\Api\V1\LeadFilterSetController::class, 'index']);
+        Route::middleware('role:super_admin,admin')->group(function (): void {
+            Route::post('lead-filter-sets', [\App\Http\Controllers\Api\V1\LeadFilterSetController::class, 'store']);
+            Route::patch('lead-filter-sets/{leadFilterSet}', [\App\Http\Controllers\Api\V1\LeadFilterSetController::class, 'update']);
+            Route::delete('lead-filter-sets/{leadFilterSet}', [\App\Http\Controllers\Api\V1\LeadFilterSetController::class, 'destroy']);
+        });
 
         // Lead Recycling
         Route::get('leads/recycle', [\App\Http\Controllers\Api\V1\LeadRecycleController::class, 'index']);
@@ -102,9 +111,14 @@ Route::prefix('v1')->group(function (): void {
             Route::patch('/departments/{id}/restore', [DepartmentController::class, 'restore']);
             Route::get('/departments/{id}/members', [DepartmentController::class, 'members']);
             Route::apiResource('departments', DepartmentController::class);
-            Route::apiResource('sub-brands', \App\Http\Controllers\Api\V1\SubBrandController::class);
+            // Write ops admin-only; index is available to all authenticated users below
+            Route::apiResource('sub-brands', \App\Http\Controllers\Api\V1\SubBrandController::class)
+                ->except(['index']);
             Route::apiResource('attendance', AttendanceController::class)->except(['show']);
         });
+
+        // Readable by any authenticated role (dept heads, sales, imports, dashboards)
+        Route::get('/sub-brands', [\App\Http\Controllers\Api\V1\SubBrandController::class, 'index']);
 
         Route::get('/challenge-categories', [ChallengeCategoryController::class, 'index']);
         Route::post('/challenge-categories', [ChallengeCategoryController::class, 'store']);
@@ -228,6 +242,7 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('/leads/advisor-queue', [LeadController::class, 'advisorQueue']);
                 Route::post('/leads/bulk-assign-psa', [LeadController::class, 'bulkAssignPsa']);
                 Route::post('/leads/bulk-assign-advisor', [LeadController::class, 'bulkAssignAdvisor']);
+                Route::post('/leads/bulk-assign-sales-owner', [LeadController::class, 'bulkAssignSalesOwner']);
                 Route::get('/sales-staff/psas', [UserController::class, 'availablePsas']);
                 Route::get('/sales-staff/advisors', [UserController::class, 'availableAdvisors']);
 
@@ -235,12 +250,17 @@ Route::prefix('v1')->group(function (): void {
                 Route::post('/leads/{lead}/activities', [LeadActivityController::class, 'store']);
                 Route::get('/leads/{lead}/history', [LeadHistoryController::class, 'index']);
 
+                Route::get('/call-logs', [CallLogController::class, 'index']);
+                Route::post('/call-logs/unknown/{unknownCall}/link', [CallLogController::class, 'link']);
+                Route::post('/call-logs/unknown/{unknownCall}/ignore', [CallLogController::class, 'ignore']);
+
                 Route::get('/calendar/events', [CalendarController::class, 'events']);
             });
 
             // Tasks can be viewed and managed even after checkout or before checkin
             Route::get('/tasks', [TaskController::class, 'index']);
             Route::post('/tasks', [TaskController::class, 'store']);
+            Route::post('/tasks/bulk-from-leads', [TaskController::class, 'bulkFromLeads']);
             Route::get('/tasks/{task}', [TaskController::class, 'show']);
             Route::patch('/tasks/{task}', [TaskController::class, 'update']);
             Route::delete('/tasks/{task}', [TaskController::class, 'destroy']);

@@ -19,7 +19,7 @@ class LeadActivityController extends Controller
     public function store(Request $request, Lead $lead)
     {
         $data = $request->validate([
-            'type' => ['required', 'string', Rule::in(['call', 'whatsapp', 'sms', 'email', 'note', 'assessment', 'meeting', 'followup'])],
+            'type' => ['required', 'string', Rule::in(['call', 'whatsapp', 'sms', 'email', 'note', 'assessment', 'meeting', 'followup', 'recycled', 'stage_change', 'assignment'])],
             'direction' => ['nullable', 'string'],
             'connected' => ['nullable', 'boolean'],
             'outcome' => ['nullable', 'string'],

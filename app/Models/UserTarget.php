@@ -16,9 +16,10 @@ class UserTarget extends Model
 
     protected $fillable = [
         'user_id',
+        'target_type',
+        'period',
+        'target_value',
         'product_name',
-        'target',
-        'achieved',
         'month',
         'year',
     ];

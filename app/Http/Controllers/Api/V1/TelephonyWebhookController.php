@@ -41,6 +41,7 @@ class TelephonyWebhookController extends Controller
                 'duration_sec' => $data['duration_sec'] ?? null,
                 'recording_url' => $data['recording_url'] ?? null,
                 'disposition' => $data['disposition'] ?? null,
+                'status' => 'open',
             ]);
             return response()->json(['status' => 'unknown_call_logged']);
         }

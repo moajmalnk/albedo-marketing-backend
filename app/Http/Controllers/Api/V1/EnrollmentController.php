@@ -72,7 +72,13 @@ class EnrollmentController extends Controller
 
         $data = $this->validatePayload($request, true);
 
-        $enrollment = Enrollment::query()->create($data);
+        $enrollment = DB::transaction(function () use ($request, $data) {
+            $enrollment = Enrollment::query()->create($data);
+            $enrollment->ensureOpeningPayment($request->user()?->id);
+            $enrollment->syncAmountsFromPayments();
+
+            return $enrollment->fresh();
+        });
 
         return response()->json(
             $enrollment->load([
@@ -90,10 +96,24 @@ class EnrollmentController extends Controller
 
         $data = $this->validatePayload($request, false);
 
-        $enrollment->update($data);
+        $enrollment = DB::transaction(function () use ($request, $enrollment, $data) {
+            $enrollment->update($data);
+            $enrollment->refresh();
+
+            // Manual spot with no ledger yet → open as a payment.
+            // If payments already exist, paid/balance always follow the ledger.
+            if ($enrollment->payments()->doesntExist()) {
+                $enrollment->ensureOpeningPayment($request->user()?->id);
+            }
+            if ($enrollment->payments()->exists()) {
+                $enrollment->syncAmountsFromPayments();
+            }
+
+            return $enrollment->fresh();
+        });
 
         return response()->json(
-            $enrollment->fresh()->load([
+            $enrollment->load([
                 'lead:id,student_name,phone',
                 'advisor:id,first_name,last_name',
                 'payments',

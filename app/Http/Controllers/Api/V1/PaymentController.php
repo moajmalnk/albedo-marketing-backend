@@ -25,6 +25,11 @@ class PaymentController extends Controller
             'limit' => ['nullable', 'integer', 'min:1', 'max:200'],
         ]);
 
+        // Heal enrollments where spot was saved without a payment ledger row.
+        if ($enrollment && $enrollment->exists && $enrollment->ensureOpeningPayment($request->user()?->id)) {
+            $enrollment->syncAmountsFromPayments();
+        }
+
         $actor = $request->user()?->loadMissing('role');
         $roleKey = $actor?->role?->key;
 
@@ -64,16 +69,12 @@ class PaymentController extends Controller
         $data['enrollment_id'] = $enrollment->id;
         $data['received_by'] = $data['received_by'] ?? $request->user()?->id;
 
-        $payment = DB::transaction(function () use ($enrollment, $data) {
-            $payment = Payment::query()->create($data);
+        $payment = DB::transaction(function () use ($request, $enrollment, $data) {
+            // Preserve spot entered at enrollment that never became a payment row.
+            $enrollment->ensureOpeningPayment($request->user()?->id);
 
-            $totalPaid = (float) $enrollment->payments()->sum('amount');
-            $balance = max(0, (float) $enrollment->package_amount - $totalPaid);
-            $enrollment->update([
-                'spot_amount' => $totalPaid,
-                'balance_amount' => $balance,
-                'admission_status' => $balance <= 0 ? 'full' : ($enrollment->admission_status === 'full' ? 'partial' : $enrollment->admission_status),
-            ]);
+            $payment = Payment::query()->create($data);
+            $enrollment->syncAmountsFromPayments();
 
             return $payment;
         });
@@ -99,13 +100,7 @@ class PaymentController extends Controller
             $payment->update($data);
             $enrollment = $payment->enrollment()->first();
             if ($enrollment) {
-                $totalPaid = (float) $enrollment->payments()->sum('amount');
-                $balance = max(0, (float) $enrollment->package_amount - $totalPaid);
-                $enrollment->update([
-                    'spot_amount' => $totalPaid,
-                    'balance_amount' => $balance,
-                    'admission_status' => $balance <= 0 ? 'full' : ($enrollment->admission_status === 'full' ? 'partial' : $enrollment->admission_status),
-                ]);
+                $enrollment->syncAmountsFromPayments();
             }
         });
 
@@ -120,12 +115,7 @@ class PaymentController extends Controller
             $enrollment = $payment->enrollment()->first();
             $payment->delete();
             if ($enrollment) {
-                $totalPaid = (float) $enrollment->payments()->sum('amount');
-                $balance = max(0, (float) $enrollment->package_amount - $totalPaid);
-                $enrollment->update([
-                    'spot_amount' => $totalPaid,
-                    'balance_amount' => $balance,
-                ]);
+                $enrollment->syncAmountsFromPayments();
             }
         });
 

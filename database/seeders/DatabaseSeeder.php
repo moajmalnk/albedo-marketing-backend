@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
             LeadFormOptionSeeder::class,
             UserSeeder::class,
             ChallengeCategorySeeder::class,
+            LeadFilterSetSeeder::class,
         ]);
 
         if (app()->environment('local', 'testing', 'development')) {
