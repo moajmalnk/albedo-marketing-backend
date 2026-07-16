@@ -18,9 +18,9 @@ class LeadStage extends Model
         'is_terminal',
         'is_active',
         'description',
-        'owner_role',
         'sla_hours',
         'legacy_status',
+        'team',
     ];
 
     protected function casts(): array
@@ -46,21 +46,6 @@ class LeadStage extends Model
     public function rulesTo(): HasMany
     {
         return $this->hasMany(LeadStageRule::class, 'to_stage_id');
-    }
-
-    public function permissions(): HasMany
-    {
-        return $this->hasMany(LeadStagePermission::class, 'lead_stage_id');
-    }
-
-    public function automations(): HasMany
-    {
-        return $this->hasMany(LeadStageAutomation::class, 'lead_stage_id')->orderBy('sort_order');
-    }
-
-    public function requiredFields(): HasMany
-    {
-        return $this->hasMany(LeadStageRequiredField::class, 'lead_stage_id');
     }
 
     public function scopeActive(Builder $query): Builder

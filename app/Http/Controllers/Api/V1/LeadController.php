@@ -53,25 +53,83 @@ class LeadController extends Controller
         return $rules;
     }
 
+    private function applyRbacToQuery(Builder $query, \App\Models\User $user = null): void
+    {
+        if (!$user) return;
+        
+        $user->loadMissing('role');
+        $roleKey = $user->role?->key ?? '';
+
+        if (in_array($roleKey, ['super_admin', 'admin', 'dept_head'], true)) {
+            if ($roleKey === 'dept_head') {
+                $dept = $user->department;
+                $query->where(function (Builder $q) use ($dept) {
+                    if (! empty($dept)) {
+                        $expectedSourceGroup = ($dept === 'IM') ? 'influence' : (($dept === 'PM') ? 'performance' : null);
+
+                        $q->where('assigned_dept', $dept)
+                            ->orWhereHas('owner', function ($oq) use ($dept) {
+                                $oq->where('department', $dept);
+                            });
+
+                        if ($expectedSourceGroup) {
+                            $q->orWhere(function ($uq) use ($expectedSourceGroup) {
+                                $uq->whereNull('owner_id')
+                                    ->where('source_group', $expectedSourceGroup);
+                            });
+                        }
+                    } else {
+                        $q->whereRaw('1 = 0');
+                    }
+                });
+            }
+        } elseif (in_array($roleKey, ['telecaller', 'marketer'], true)) {
+            if ($roleKey === 'telecaller') {
+                // Telecallers can see leads they own, regardless of the stage team (so they can see handed-off leads)
+                $query->where(function ($q) use ($user) {
+                    $q->where('owner_id', $user->id)
+                      ->orWhere('telecaller_owner_id', $user->id);
+                });
+            } elseif ($roleKey === 'marketer') {
+                // Marketers see leads they generated or unassigned marketing leads
+                $query->where(function ($q) {
+                    $q->whereHas('stage', function ($sq) {
+                        $sq->where('team', 'marketing');
+                    });
+                })->where(function (Builder $q) use ($user) {
+                    $q->where('generated_by_user_id', $user->id)
+                        ->orWhereNull('owner_id');
+                });
+            }
+        } elseif (in_array($roleKey, ['sales_head', 'advisor', 'psa'], true)) {
+            $query->whereHas('stage', function ($q) {
+                $q->where('team', 'sales');
+            });
+            if (in_array($roleKey, ['advisor', 'psa'], true)) {
+                $query->where(function ($q) use ($user) {
+                    $q->where('owner_id', $user->id)
+                      ->orWhere('advisor_owner_id', $user->id)
+                      ->orWhere('psa_owner_id', $user->id);
+                });
+            }
+        }
+    }
+
     public function kpis(Request $request)
     {
         $baseQuery = Lead::query();
+        $this->applyRbacToQuery($baseQuery, $request->user());
         
         $total = (clone $baseQuery)->count();
         $unassigned = (clone $baseQuery)->whereNull('owner_id')->count();
         
-        $qualified = (clone $baseQuery)->whereHas('stage', function($q) {
-            $q->where('key', 'qualified');
-        })->count();
-        
         $lostToday = (clone $baseQuery)->whereHas('stage', function($q) {
-            $q->where('key', 'closed_lost');
+            $q->where('type', 'lost');
         })->whereDate('updated_at', now()->toDateString())->count();
         
         return response()->json([
             'total' => $total,
             'unassigned' => $unassigned,
-            'qualified' => $qualified,
             'lost_today' => $lostToday,
             'overdue' => 0
         ]);
@@ -134,54 +192,7 @@ class LeadController extends Controller
         }
 
         // Role-Based Access Control (RBAC) implementation
-        $user = $request->user();
-        if ($user) {
-            $user->loadMissing('role');
-            $roleKey = $user->role?->key ?? '';
-
-            if (in_array($roleKey, ['telecaller', 'psa', 'advisor'], true)) {
-                $query->where('owner_id', $user->id);
-            } elseif ($roleKey === 'sales_head') {
-                $visibleStageIds = \App\Models\LeadStagePermission::where('role', 'sales_head')
-                    ->where('can_view', true)
-                    ->pluck('lead_stage_id');
-
-                // Sales-created and telecaller-handoff leads land on `qualified`. Always include it
-                // even if stage-permission rows were never migrated/updated.
-                $qualifiedStageId = LeadStage::query()->where('key', 'qualified')->value('id');
-                if ($qualifiedStageId) {
-                    $visibleStageIds = $visibleStageIds->push($qualifiedStageId)->unique()->values();
-                }
-
-                $query->whereIn('stage_id', $visibleStageIds);
-            } elseif ($roleKey === 'dept_head') {
-                $dept = $user->department;
-                $query->where(function (Builder $q) use ($dept) {
-                    if (! empty($dept)) {
-                        $expectedSourceGroup = ($dept === 'IM') ? 'influence' : (($dept === 'PM') ? 'performance' : null);
-
-                        $q->where('assigned_dept', $dept)
-                            ->orWhereHas('owner', function ($oq) use ($dept) {
-                                $oq->where('department', $dept);
-                            });
-
-                        if ($expectedSourceGroup) {
-                            $q->orWhere(function ($uq) use ($expectedSourceGroup) {
-                                $uq->whereNull('owner_id')
-                                    ->where('source_group', $expectedSourceGroup);
-                            });
-                        }
-                    } else {
-                        $q->whereRaw('1 = 0');
-                    }
-                });
-            } elseif ($roleKey === 'marketer') {
-                $query->where(function (Builder $q) use ($user) {
-                    $q->where('generated_by_user_id', $user->id)
-                        ->orWhereNull('owner_id');
-                });
-            }
-        }
+        $this->applyRbacToQuery($query, $request->user());
         if ($request->filled('q')) {
             $needle = trim((string) $request->string('q'));
             if ($needle !== '') {
@@ -365,13 +376,18 @@ class LeadController extends Controller
         } elseif ($smartView === 'my_assigned' && $user) {
             $query->where('owner_id', $user->id);
         } elseif ($smartView === 'qualified') {
-            $query->whereHas('stage', fn($q) => $q->where('key', 'qualified'));
+            $query->whereHas('stage', fn($q) => $q->where('key', 'qualified_for_sales'));
         } elseif ($smartView === 'recovery') {
             $query->whereHas('stage', fn($q) => $q->whereIn('key', [
                 'recovery_required',
                 'psa_recovery',
                 'returned_to_advisor',
             ]));
+        }
+        
+        $pipeline = $request->input('pipeline', 'All');
+        if ($pipeline !== 'All' && in_array($pipeline, ['marketing', 'sales'])) {
+            $query->whereHas('stage', fn($q) => $q->where('team', $pipeline));
         }
         $month = $request->input('month');
         if ($month !== null && $month !== '' && $month !== 'All') {
@@ -441,41 +457,7 @@ class LeadController extends Controller
         $query->whereHas('stage', fn ($q) => $q->whereIn('label', $statusLabels));
     }
 
-    private function stagePermission(?int $stageId, string $roleKey): ?LeadStagePermission
-    {
-        if (! $stageId) {
-            return null;
-        }
 
-        return LeadStagePermission::query()
-            ->where('lead_stage_id', $stageId)
-            ->where('role', $roleKey)
-            ->first();
-    }
-
-    private function defaultStagePermission(string $roleKey, ?LeadStage $stage = null): array
-    {
-        $isLeader = in_array($roleKey, ['super_admin', 'admin', 'sales_head', 'department_head'], true);
-        $isOwnerRole = $stage && $stage->owner_role === $roleKey;
-
-        return [
-            'can_view' => true,
-            'can_move' => $isLeader || $isOwnerRole,
-            'can_override' => $isLeader,
-            'can_close' => $isLeader || $isOwnerRole,
-            'can_reopen' => $isLeader,
-            'can_delete' => in_array($roleKey, ['super_admin', 'admin'], true),
-        ];
-    }
-
-    private function stagePermissionValue(?LeadStagePermission $permission, string $key, string $roleKey, ?LeadStage $stage = null): bool
-    {
-        if ($permission) {
-            return (bool) $permission->{$key};
-        }
-
-        return (bool) $this->defaultStagePermission($roleKey, $stage)[$key];
-    }
 
     public function store(Request $request, LeadService $leadService)
     {
@@ -547,12 +529,11 @@ class LeadController extends Controller
         // Sales-head creates skip telecaller stages — land at qualified (same as telecaller handoff).
         $creator = $request->user();
         $creator?->loadMissing('role');
-        $initialStageKey = ($creator?->role?->key === 'sales_head') ? 'qualified' : 'new_lead';
+        $initialStageKey = ($creator?->role?->key === 'sales_head') ? 'sales_new_lead' : 'new_lead';
         $initialStage = LeadStage::query()->where('key', $initialStageKey)->first();
         if ($initialStage) {
             $data['stage_id'] = $initialStage->id;
-            $data['status'] = $initialStage->legacy_status
-                ?? ($initialStageKey === 'qualified' ? 'Qualified' : 'New');
+            $data['status'] = $initialStage->label ?? 'New Lead';
         }
 
         return response()->json($leadService->createLead($data)->load(['stage', 'closedReason', 'closedBy:id,first_name,last_name,email', 'owner', 'generatedBy:id,first_name,last_name,email']), 201);
@@ -618,20 +599,15 @@ class LeadController extends Controller
 
         $user = $request->user();
         $userRole = $user?->role?->key ?? 'telecaller';
+        $isAdmin = in_array($userRole, ['super_admin', 'admin', 'dept_head'], true);
+        $isMarketing = in_array($userRole, ['telecaller', 'marketer'], true);
+        $isSales = in_array($userRole, ['sales_head', 'advisor', 'psa'], true);
 
         // A. Handle Closing the Lead via closed_reason_key. Closure is independent from the active pipeline.
         if (! empty($data['closed_reason_key'])) {
             $closedReason = LeadClosedReason::where('key', $data['closed_reason_key'])->first();
             if (! $closedReason) {
                 return response()->json(['message' => 'Unknown closed_reason_key'], 422);
-            }
-
-            $currentStage = $lead->stage_id ? LeadStage::query()->find($lead->stage_id) : null;
-            $permission = $this->stagePermission($lead->stage_id, $userRole);
-            $canClose = $this->stagePermissionValue($permission, 'can_close', $userRole, $currentStage)
-                || $this->stagePermissionValue($permission, 'can_override', $userRole, $currentStage);
-            if (! $canClose) {
-                return response()->json(['message' => 'Your role is not permitted to close this lead.'], 403);
             }
 
             $fromStageId = $lead->stage_id;
@@ -663,12 +639,8 @@ class LeadController extends Controller
         }
 
         if ($lead->closed_reason_id) {
-            $currentStage = $lead->stage_id ? LeadStage::query()->find($lead->stage_id) : null;
-            $currentPermission = $this->stagePermission($lead->stage_id, $userRole);
-            $canReopen = $this->stagePermissionValue($currentPermission, 'can_reopen', $userRole, $currentStage)
-                || $this->stagePermissionValue($currentPermission, 'can_override', $userRole, $currentStage);
-            if (! $canReopen) {
-                return response()->json(['message' => 'Your role is not permitted to reopen this lead.'], 403);
+            if (! $isAdmin && $userRole !== 'sales_head') {
+                return response()->json(['message' => 'Only admins or sales head can reopen this lead.'], 403);
             }
         }
 
@@ -682,20 +654,18 @@ class LeadController extends Controller
             return response()->json(['message' => 'Unknown stage_key', 'stage_key' => $stageKey], 422);
         }
 
-        // 1. Permission Check
-        $permission = $this->stagePermission($targetStage->id, $userRole);
-
-        $canMove = $this->stagePermissionValue($permission, 'can_move', $userRole, $targetStage)
-            || $this->stagePermissionValue($permission, 'can_override', $userRole, $targetStage);
-        $canOverride = $this->stagePermissionValue($permission, 'can_override', $userRole, $targetStage);
-        if (! $canMove) {
-            return response()->json([
-                'message' => 'Your role ('.$userRole.') is not permitted to move leads to the stage "'.$targetStage->label.'".',
-            ], 403);
+        // 1. Team Check
+        if (! $isAdmin) {
+            if ($isMarketing && $targetStage->team !== 'marketing' && $targetStage->team !== 'both') {
+                return response()->json(['message' => 'Marketing team can only move leads to marketing stages.'], 403);
+            }
+            if ($isSales && $targetStage->team !== 'sales' && $targetStage->team !== 'both') {
+                return response()->json(['message' => 'Sales team can only move leads to sales stages.'], 403);
+            }
         }
 
         // 2. Transition Rule Check
-        if ($lead->stage_id && $lead->stage_id !== $targetStage->id && ! $canOverride) {
+        if ($lead->stage_id && $lead->stage_id !== $targetStage->id && ! $isAdmin) {
             $ruleExists = LeadStageRule::where('from_stage_id', $lead->stage_id)
                 ->where('to_stage_id', $targetStage->id)
                 ->where('is_active', true)
@@ -709,37 +679,15 @@ class LeadController extends Controller
             }
         }
 
-        // 3. Required Fields Check
-        $requiredFields = LeadStageRequiredField::where('lead_stage_id', $targetStage->id)
-            ->where('is_required', true)
-            ->get();
-
-        $missingFields = [];
+        // Gather additional fields to update
         $fieldsToUpdate = [];
-        foreach ($requiredFields as $req) {
-            $val = $request->input($req->field_name, $lead->{$req->field_name});
-            if (empty($val)) {
-                $missingFields[] = $req->field_label;
-            } else {
-                $fieldsToUpdate[$req->field_name] = $val;
-            }
-        }
-
-        // Also check if any additional fields were passed in request that exist in lead model and update them
         foreach (['course_interested', 'qualification', 'preferred_campus'] as $f) {
             if ($request->has($f)) {
                 $fieldsToUpdate[$f] = $request->input($f);
             }
         }
 
-        if (! empty($missingFields)) {
-            return response()->json([
-                'message' => 'Required fields missing for stage "'.$targetStage->label.'": '.implode(', ', $missingFields),
-                'missing_fields' => $missingFields,
-            ], 422);
-        }
-
-        // 4. Update Lead Stage
+        // 3. Update Lead Stage
         $fromStageId = $lead->stage_id;
         $lead->update(array_merge([
             'stage_id' => $targetStage->id,
@@ -759,32 +707,39 @@ class LeadController extends Controller
             'changed_at' => now(),
         ]);
 
-        // 5. Execute Stage Automations
-        $automations = LeadStageAutomation::where('lead_stage_id', $targetStage->id)
-            ->where('is_active', true)
-            ->orderBy('sort_order')
-            ->get();
+        return response()->json(['lead' => $lead->fresh(['stage', 'closedReason', 'closedBy:id,first_name,last_name,email', 'owner']), 'transition' => $transition], 200);
+    }
 
-        foreach ($automations as $auto) {
-            if ($auto->action === 'assign_role' && ! empty($auto->target_role)) {
-                $candidate = User::query()
-                    ->whereHas('role', fn ($q) => $q->where('key', $auto->target_role))
-                    ->where('status', 'active')
-                    ->first();
-                if ($candidate) {
-                    $lead->update(['owner_id' => $candidate->id]);
-                }
-            } elseif ($auto->action === 'create_task') {
-                Task::create([
-                    'title' => $auto->task_template ?? ('Follow up on '.$targetStage->label),
-                    'lead_id' => $lead->id,
-                    'assigned_to' => $lead->owner_id ?? $user->id,
-                    'created_by' => $user->id,
-                    'status' => 'pending',
-                    'due_at' => now()->addHours($targetStage->sla_hours ?? 24),
-                ]);
-            }
+    public function handoffToSales(Request $request, Lead $lead)
+    {
+        $user = $request->user();
+        
+        $firstSalesStage = LeadStage::query()
+            ->active()
+            ->where('team', 'sales')
+            ->orderBy('order')
+            ->first();
+
+        if (! $firstSalesStage) {
+            return response()->json(['message' => 'No active sales stages found.'], 422);
         }
+
+        $fromStageId = $lead->stage_id;
+        $lead->update([
+            'stage_id' => $firstSalesStage->id,
+            'owner_id' => null,
+            'assignment_status' => 'waiting',
+            'status' => $firstSalesStage->legacy_status ?? 'Qualified',
+        ]);
+
+        $transition = LeadStageTransition::create([
+            'lead_id' => $lead->id,
+            'from_stage_id' => $fromStageId,
+            'to_stage_id' => $firstSalesStage->id,
+            'reason' => 'Manual handoff to sales team',
+            'changed_by' => $user->id,
+            'changed_at' => now(),
+        ]);
 
         return response()->json(['lead' => $lead->fresh(['stage', 'closedReason', 'closedBy:id,first_name,last_name,email', 'owner']), 'transition' => $transition], 200);
     }
