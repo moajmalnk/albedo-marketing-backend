@@ -196,6 +196,7 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('/lead-assignments', [LeadAssignmentController::class, 'index']);
                 Route::get('/lead-assignments/{lead}', [LeadAssignmentController::class, 'show']);
                 Route::patch('/leads/{lead}/stage', [LeadController::class, 'changeStage']);
+                Route::post('/leads/{lead}/handoff-to-sales', [LeadController::class, 'handoffToSales']);
                 Route::get('/imports/templates', [LeadImportController::class, 'templates']);
                 Route::get('/imports/templates/{type}', [LeadImportController::class, 'downloadTemplate']);
                 Route::get('/imports/{import}/report', [LeadImportController::class, 'report']);
