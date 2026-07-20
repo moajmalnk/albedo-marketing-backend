@@ -526,14 +526,31 @@ class LeadController extends Controller
         $data['created_by'] = $request->user()?->id;
         $data['generated_by_user_id'] = $data['generated_by_user_id'] ?? $request->user()?->id;
 
-        // Sales-head creates skip telecaller stages — land at qualified (same as telecaller handoff).
+        // Sales team creates land on the first sales pipeline stage (not marketing new_lead).
         $creator = $request->user();
         $creator?->loadMissing('role');
-        $initialStageKey = ($creator?->role?->key === 'sales_head') ? 'sales_new_lead' : 'new_lead';
-        $initialStage = LeadStage::query()->where('key', $initialStageKey)->first();
+        $roleKey = $creator?->role?->key;
+
+        if (in_array($roleKey, ['sales_head', 'advisor', 'psa'], true)) {
+            $initialStage = LeadStage::query()
+                ->active()
+                ->where('team', 'sales')
+                ->orderBy('order')
+                ->first();
+
+            // Legacy fallbacks when bifurcated sales pipeline is not seeded yet.
+            if (! $initialStage) {
+                $initialStage = LeadStage::query()->where('key', 'sales_new_lead')->first()
+                    ?? LeadStage::query()->where('key', 'qualified')->first();
+            }
+        } else {
+            $initialStage = LeadStage::query()->where('key', 'new_lead')->first()
+                ?? LeadStage::query()->active()->where('team', 'marketing')->orderBy('order')->first();
+        }
+
         if ($initialStage) {
             $data['stage_id'] = $initialStage->id;
-            $data['status'] = $initialStage->label ?? 'New Lead';
+            $data['status'] = $initialStage->legacy_status ?? $initialStage->label ?? 'New Lead';
         }
 
         return response()->json($leadService->createLead($data)->load(['stage', 'closedReason', 'closedBy:id,first_name,last_name,email', 'owner', 'generatedBy:id,first_name,last_name,email']), 201);

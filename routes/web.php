@@ -8,3 +8,10 @@ Route::get('/', function () {
 });
 
 Route::get('/sanctum/csrf-cookie', [CsrfCookieController::class, 'show']);
+
+Route::get('/clear-opcache', function () {
+    if (function_exists('opcache_reset')) {
+        opcache_reset();
+    }
+    return 'OPcache cleared';
+});
