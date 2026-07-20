@@ -747,3 +747,26 @@
 #19 C:/work_codo/albedo-marketing/albedo-marketing/backend/artisan(13): Illuminate/Foundation/Application->handleCommand(Object(Symfony/Component/Console/Input/ArgvInput))
 #20 {main}
 "} 
+[2026-07-20 08:22:36] local.ERROR: There are no commands defined in the "octane" namespace. {"exception":"[object] (Symfony\\Component\\Console\\Exception\\NamespaceNotFoundException(code: 0): There are no commands defined in the \"octane\" namespace. at C:/work_codo/albedo-marketing/albedo-marketing/backend/vendor/symfony/console/Application.php:694)
+[stacktrace]
+#0 C:/work_codo/albedo-marketing/albedo-marketing/backend/vendor/symfony/console/Application.php(743): Symfony/Component/Console/Application->findNamespace('octane')
+#1 C:/work_codo/albedo-marketing/albedo-marketing/backend/vendor/symfony/console/Application.php(298): Symfony/Component/Console/Application->find('octane:reload')
+#2 C:/work_codo/albedo-marketing/albedo-marketing/backend/vendor/symfony/console/Application.php(195): Symfony/Component/Console/Application->doRun(Object(Symfony/Component/Console/Input/ArgvInput), Object(Symfony/Component/Console/Output/ConsoleOutput))
+#3 C:/work_codo/albedo-marketing/albedo-marketing/backend/vendor/laravel/framework/src/Illuminate/Foundation/Console/Kernel.php(198): Symfony/Component/Console/Application->run(Object(Symfony/Component/Console/Input/ArgvInput), Object(Symfony/Component/Console/Output/ConsoleOutput))
+#4 C:/work_codo/albedo-marketing/albedo-marketing/backend/vendor/laravel/framework/src/Illuminate/Foundation/Application.php(1235): Illuminate/Foundation/Console/Kernel->handle(Object(Symfony/Component/Console/Input/ArgvInput), Object(Symfony/Component/Console/Output/ConsoleOutput))
+#5 C:/work_codo/albedo-marketing/albedo-marketing/backend/artisan(13): Illuminate/Foundation/Application->handleCommand(Object(Symfony/Component/Console/Input/ArgvInput))
+#6 {main}
+"} 
+[2026-07-20 08:32:07] local.ERROR: Call to undefined relationship [department] on model [App\Models\User]. {"exception":"[object] (Illuminate\\Database\\Eloquent\\RelationNotFoundException(code: 0): Call to undefined relationship [department] on model [App\\Models\\User]. at C:/work_codo/albedo-marketing/albedo-marketing/backend/vendor/laravel/framework/src/Illuminate/Database/Eloquent/RelationNotFoundException.php:35)
+[stacktrace]
+#0 C:/work_codo/albedo-marketing/albedo-marketing/backend/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php(878): Illuminate/Database/Eloquent/RelationNotFoundException::make(Object(App/Models/User), 'department')
+#1 C:/work_codo/albedo-marketing/albedo-marketing/backend/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Relations/Relation.php(120): Illuminate/Database/Eloquent/Builder->Illuminate/Database/Eloquent/{closure}()
+#2 C:/work_codo/albedo-marketing/albedo-marketing/backend/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php(874): Illuminate/Database/Eloquent/Relations/Relation::noConstraints(Object(Closure))
+#3 C:/work_codo/albedo-marketing/albedo-marketing/backend/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php(848): Illuminate/Database/Eloquent/Builder->getRelation('department')
+#4 C:/work_codo/albedo-marketing/albedo-marketing/backend/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php(828): Illuminate/Database/Eloquent/Builder->eagerLoadRelation(Array, 'department', Object(Closure))
+#5 C:/work_codo/albedo-marketing/albedo-marketing/backend/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php(794): Illuminate/Database/Eloquent/Builder->eagerLoadRelations(Array)
+#6 C:/work_codo/albedo-marketing/albedo-marketing/backend/vendor/laravel/framework/src/Illuminate/Database/Concerns/BuildsQueries.php(343): Illuminate/Database/Eloquent/Builder->get(Array)
+#7 C:/work_codo/albedo-marketing/albedo-marketing/backend/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php(477): Illuminate/Database/Eloquent/Builder->first(Array)
+#8 C:/work_codo/albedo-marketing/albedo-marketing/backend/get_user.php(7): Illuminate/Database/Eloquent/Builder->find(2)
+#9 {main}
+"} 

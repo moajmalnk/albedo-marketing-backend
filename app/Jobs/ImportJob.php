@@ -9,26 +9,55 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 
 class ImportJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    protected $import;
-    protected $rows;
-    protected $ip;
-    protected $userAgent;
+    protected LeadImport $import;
 
-    public function __construct(LeadImport $import, array $rows, ?string $ip = null, ?string $userAgent = null)
+    /** Relative path on the local disk where rows were staged. */
+    protected string $rowsPath;
+
+    protected ?string $ip;
+
+    protected ?string $userAgent;
+
+    public function __construct(LeadImport $import, string $rowsPath, ?string $ip = null, ?string $userAgent = null)
     {
         $this->import = $import;
-        $this->rows = $rows;
+        $this->rowsPath = $rowsPath;
         $this->ip = $ip;
         $this->userAgent = $userAgent;
     }
 
     public function handle(ImportService $importService): void
     {
-        $importService->executeImport($this->import, $this->rows, $this->ip, $this->userAgent);
+        if (! Storage::disk('local')->exists($this->rowsPath)) {
+            throw new RuntimeException("Import rows file missing: {$this->rowsPath}");
+        }
+
+        $raw = Storage::disk('local')->get($this->rowsPath);
+        $rows = json_decode($raw, true);
+
+        if (! is_array($rows)) {
+            throw new RuntimeException("Import rows file is invalid JSON: {$this->rowsPath}");
+        }
+
+        try {
+            $importService->executeImport($this->import, $rows, $this->ip, $this->userAgent);
+        } finally {
+            Storage::disk('local')->delete($this->rowsPath);
+            // Remove empty import folder when possible.
+            $dir = dirname($this->rowsPath);
+            if ($dir !== '.' && Storage::disk('local')->exists($dir)) {
+                $remaining = Storage::disk('local')->files($dir);
+                if ($remaining === []) {
+                    Storage::disk('local')->deleteDirectory($dir);
+                }
+            }
+        }
     }
 }

@@ -332,9 +332,16 @@ class LeadApiTest extends TestCase
         $this->assertNull($lead->student_name);
     }
 
-    public function test_sales_head_create_defaults_to_qualified_stage(): void
+    public function test_sales_head_create_defaults_to_first_sales_stage(): void
     {
-        $qualified = LeadStage::query()->where('key', 'qualified')->firstOrFail();
+        $expected = LeadStage::query()
+            ->where('is_active', true)
+            ->where('team', 'sales')
+            ->orderBy('order')
+            ->first()
+            ?? LeadStage::query()->where('key', 'sales_new_lead')->first()
+            ?? LeadStage::query()->where('key', 'qualified')->firstOrFail();
+
         $user = $this->makeUser('sales_head');
         Sanctum::actingAs($user);
 
@@ -345,9 +352,9 @@ class LeadApiTest extends TestCase
         ]);
 
         $response->assertCreated()
-            ->assertJsonPath('stage.key', 'qualified')
-            ->assertJsonPath('stage_id', $qualified->id)
-            ->assertJsonPath('status', $qualified->legacy_status ?? 'Qualified');
+            ->assertJsonPath('stage.key', $expected->key)
+            ->assertJsonPath('stage_id', $expected->id)
+            ->assertJsonPath('status', $expected->legacy_status ?? $expected->label);
     }
 
     public function test_admin_create_defaults_to_new_lead_stage(): void

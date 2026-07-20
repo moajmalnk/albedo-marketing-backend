@@ -33,6 +33,11 @@ class ValidationService
             $errors['email'] = 'Invalid email address format.';
         }
 
+        $sourceGroup = $row['source_group'] ?? null;
+        if (!empty($sourceGroup) && !in_array(strtolower(trim((string)$sourceGroup)), ['influence', 'performance', 'albedo', 'reference', 'other'], true)) {
+            $errors['source_group'] = 'Invalid source_group. Allowed: influence, performance, albedo, reference, other.';
+        }
+
         return $errors;
     }
 }

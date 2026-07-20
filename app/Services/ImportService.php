@@ -8,7 +8,6 @@ use App\Models\LeadImportRow;
 use App\Models\LeadStage;
 use App\Models\AuditLog;
 use App\Models\User;
-use App\Jobs\ImportJob;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -108,7 +107,7 @@ class ImportService
     }
 
     /**
-     * Import rows. If rows count > 100, queues background job.
+     * Import rows synchronously (all sizes).
      */
     public function startImport(User $user, array $rows, array $payload): LeadImport
     {
@@ -129,14 +128,9 @@ class ImportService
         $ip = request()->ip();
         $userAgent = request()->userAgent();
 
-        if (count($rows) > 100) {
-            $import->update(['status' => 'Queued']);
-            ImportJob::dispatch($import, $rows, $ip, $userAgent);
-        } else {
-            $this->executeImport($import, $rows, $ip, $userAgent);
-        }
+        $this->executeImport($import, $rows, $ip, $userAgent);
 
-        return $import;
+        return $import->fresh();
     }
 
     /**
@@ -144,6 +138,8 @@ class ImportService
      */
     public function executeImport(LeadImport $import, array $rows, ?string $ip = null, ?string $userAgent = null): void
     {
+        @set_time_limit(0);
+
         $startTime = Carbon::now();
         $import->update([
             'status' => 'Processing',
@@ -155,7 +151,37 @@ class ImportService
         $rejected = 0;
         $failed = 0;
 
-        $newLeadStageId = LeadStage::query()->where('key', 'new_lead')->value('id');
+        $user = clone $import->user ?? User::with('role')->find($import->user_id);
+        $user?->loadMissing('role');
+        $roleKey = $user?->role?->key ?? '';
+        $isSalesUser = in_array($roleKey, ['sales_head', 'advisor', 'psa', 'sales'], true);
+
+        $assignedDept = 'SALES';
+        if ($import->department) {
+            $deptUpper = strtoupper($import->department);
+            if (str_contains($deptUpper, 'MARKETING') || $deptUpper === 'PM' || $deptUpper === 'IM') {
+                $assignedDept = 'MARKETING';
+            }
+        }
+
+        if ($isSalesUser || $assignedDept === 'SALES') {
+            $initialStage = LeadStage::query()
+                ->active()
+                ->where('team', 'sales')
+                ->orderBy('order')
+                ->first();
+            if (! $initialStage) {
+                $initialStage = LeadStage::query()->where('key', 'sales_new_lead')->first()
+                    ?? LeadStage::query()->where('key', 'qualified')->first();
+            }
+        } else {
+            $initialStage = LeadStage::query()->where('key', 'new_lead')->first()
+                ?? LeadStage::query()->active()->where('team', 'marketing')->orderBy('order')->first();
+        }
+
+        $targetStageId = $initialStage?->id;
+        $targetStatus = $initialStage?->legacy_status ?? $initialStage?->label ?? 'New Lead';
+
         $mapping = $import->mapping_profile;
         $criteria = $import->duplicate_criteria;
         $strategy = $import->duplicate_strategy;
@@ -164,6 +190,16 @@ class ImportService
             DB::beginTransaction();
             try {
                 $mapped = $this->mapRow($row, $mapping);
+                
+                // Auto-normalize source_group to fit the ENUM constraint
+                if (!empty($mapped['source_group'])) {
+                    $sg = strtolower(trim((string)$mapped['source_group']));
+                    if (str_contains($sg, 'performance')) $mapped['source_group'] = 'performance';
+                    elseif (str_contains($sg, 'influence')) $mapped['source_group'] = 'influence';
+                    elseif (str_contains($sg, 'albedo')) $mapped['source_group'] = 'albedo';
+                    elseif (str_contains($sg, 'reference')) $mapped['source_group'] = 'reference';
+                    else $mapped['source_group'] = 'other';
+                }
                 
                 // Validate
                 $errors = $this->validationService->validateRow($mapped);
@@ -206,6 +242,7 @@ class ImportService
                             'email' => $email,
                             'class' => $mapped['class'] ?? null,
                             'syllabus' => $mapped['syllabus'] ?? null,
+                            'course' => $mapped['course'] ?? null,
                             'city' => $mapped['city'] ?? null,
                             'district' => $mapped['district'] ?? null,
                             'state' => $mapped['state'] ?? null,
@@ -228,14 +265,6 @@ class ImportService
                     }
                 }
 
-                $assignedDept = 'SALES';
-                if ($import->department) {
-                    $deptUpper = strtoupper($import->department);
-                    if (str_contains($deptUpper, 'MARKETING') || $deptUpper === 'PM' || $deptUpper === 'IM') {
-                        $assignedDept = 'MARKETING';
-                    }
-                }
-
                 // Insert new lead
                 $this->leadService->createLead([
                     'student_name' => $mapped['student_name'] ?? 'Unknown',
@@ -244,6 +273,7 @@ class ImportService
                     'email' => $email,
                     'class' => $mapped['class'] ?? null,
                     'syllabus' => $mapped['syllabus'] ?? null,
+                    'course' => $mapped['course'] ?? null,
                     'city' => $mapped['city'] ?? null,
                     'district' => $mapped['district'] ?? null,
                     'state' => $mapped['state'] ?? null,
@@ -254,7 +284,8 @@ class ImportService
                     'campaign_id' => $import->campaign_id,
                     'created_by' => $import->user_id,
                     'generated_by_user_id' => $import->user_id,
-                    'stage_id' => $newLeadStageId,
+                    'stage_id' => $targetStageId,
+                    'status' => $targetStatus,
                     'assigned_dept' => $assignedDept,
                 ]);
 

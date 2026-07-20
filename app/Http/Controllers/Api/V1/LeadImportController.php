@@ -38,8 +38,8 @@ class LeadImportController extends Controller
             return;
         }
 
-        // View/Import access
-        if (!in_array($role, ['super_admin', 'admin', 'dept_head', 'department_head', 'marketer'], true)) {
+        // View/Import access — sales_head uses Manage Leads import modal
+        if (!in_array($role, ['super_admin', 'admin', 'dept_head', 'department_head', 'marketer', 'sales_head'], true)) {
             abort(403, 'Unauthorized action.');
         }
     }
@@ -82,7 +82,7 @@ class LeadImportController extends Controller
         );
 
         return response()->json([
-            'message' => $import->status === 'Queued' ? 'Import queued in background.' : 'Import completed.',
+            'message' => 'Import completed.',
             'import' => $import
         ]);
     }
