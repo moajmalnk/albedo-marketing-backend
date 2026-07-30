@@ -44,6 +44,7 @@ Route::prefix('v1')->group(function (): void {
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::post('/webhooks/foxbay/call', [TelephonyWebhookController::class, 'store']);
     Route::post('/telephony/webhook', [TelephonyWebhookController::class, 'store']);
+    Route::get('/public-stats', [\App\Http\Controllers\Api\V1\PublicStatsController::class, 'index']);
 
     Route::middleware('whatsapp.worker')->group(function (): void {
         Route::get('/whatsapp/worker/sessions', [WhatsAppWebhookController::class, 'workerSessions']);
