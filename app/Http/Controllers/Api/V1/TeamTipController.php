@@ -135,6 +135,23 @@ class TeamTipController extends Controller
     {
         return response()->json(TeamTipCategory::orderBy('name')->get());
     }
+
+    public function storeCategory(Request $request)
+    {
+        $this->ensureCanManageTips($request);
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255', 'unique:team_tip_categories,name'],
+            'slug' => ['required', 'string', 'max:255', 'unique:team_tip_categories,slug'],
+        ]);
+
+        $category = TeamTipCategory::create([
+            'name' => $data['name'],
+            'slug' => $data['slug'],
+        ]);
+
+        return response()->json($category, 201);
+    }
     
     public function stats(Request $request)
     {

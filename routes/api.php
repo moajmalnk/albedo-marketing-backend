@@ -139,6 +139,7 @@ Route::prefix('v1')->group(function (): void {
         Route::apiResource('campaigns', \App\Http\Controllers\Api\V1\CampaignController::class);
 
         Route::get('/team-tips/categories', [TeamTipController::class, 'categories']);
+        Route::post('/team-tips/categories', [TeamTipController::class, 'storeCategory']);
         Route::get('/team-tips/stats', [TeamTipController::class, 'stats']);
         Route::get('/team-tips/my', [TeamTipController::class, 'mine']);
         Route::post('/team-tips/read-normal', [TeamTipController::class, 'markNormalRead']);

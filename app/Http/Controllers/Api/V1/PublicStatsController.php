@@ -9,16 +9,19 @@ use Illuminate\Http\Request;
 
 class PublicStatsController extends Controller
 {
-    /**
-     * Return public statistics for the landing page.
-     * Only returns aggregated counts to prevent exposing sensitive data.
-     */
     public function index(Request $request)
     {
+        $activeLeads = Lead::whereHas('stage', function ($query) {
+            $query->where('is_terminal', false);
+        })->count();
+
+        $teamMembers = User::where('status', 'active')->count();
+        $conversionTarget = 15; // Target percentage
+
         return response()->json([
-            'active_leads' => Lead::count(),
-            'team_members' => User::count(),
-            'conversion_target' => 30, // Default static target as per landing page requirements
+            'active_leads' => $activeLeads,
+            'team_members' => $teamMembers,
+            'conversion_target' => $conversionTarget,
         ]);
     }
 }
