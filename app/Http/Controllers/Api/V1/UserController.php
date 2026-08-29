@@ -463,10 +463,28 @@ class UserController extends Controller
         ]);
     }
 
+    private function getImpersonatorId(Request $request): ?int
+    {
+        $token = $request->user()?->currentAccessToken();
+        if ($token && property_exists($token, 'abilities') && is_iterable($token->abilities)) {
+            foreach ($token->abilities as $ability) {
+                if (str_starts_with($ability, 'impersonated-by:')) {
+                    return (int) substr($ability, strlen('impersonated-by:'));
+                }
+            }
+        }
+        return null;
+    }
+
     public function destroy(Request $request, User $user)
     {
         if ($request->user()?->id === $user->id) {
             return response()->json(['message' => 'You cannot delete your own account.'], 422);
+        }
+
+        $impersonatorId = $this->getImpersonatorId($request);
+        if ($impersonatorId && $impersonatorId === (int) $user->id) {
+            return response()->json(['message' => 'You cannot delete your original account while impersonating.'], 422);
         }
 
         $this->ensureCanManageUsers($request);
@@ -497,6 +515,11 @@ class UserController extends Controller
         }
         if ($request->user()?->id === $user->id) {
             return response()->json(['message' => 'You cannot permanently delete your own account.'], 422);
+        }
+
+        $impersonatorId = $this->getImpersonatorId($request);
+        if ($impersonatorId && $impersonatorId === (int) $user->id) {
+            return response()->json(['message' => 'You cannot permanently delete your original account while impersonating.'], 422);
         }
 
         $user->tokens()->delete();
@@ -798,12 +821,14 @@ class UserController extends Controller
         $actorRole = $request->user()?->role?->key ?? '';
 
         $users = User::whereIn('id', $data['ids'])->get();
+        $impersonatorId = $this->getImpersonatorId($request);
+
         foreach ($users as $user) {
             $user->loadMissing('role');
             if ($user->role) {
                 $this->ensureCanManageTargetRole($actorRole, $user->role->key);
             }
-            if ((int) $user->id !== (int) $request->user()?->id) {
+            if ((int) $user->id !== (int) $request->user()?->id && ((int) $user->id !== $impersonatorId)) {
                 $user->tokens()->delete();
                 $user->delete();
             }
