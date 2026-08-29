@@ -37,9 +37,46 @@ class UserController extends Controller
         $actor = $request->user()?->loadMissing('role');
         $roleKey = $actor?->role?->key;
 
-        if (! in_array($roleKey, ['super_admin', 'admin', 'dept_head'], true)) {
+        if (! in_array($roleKey, ['super_admin', 'admin', 'dept_head', 'department_head', 'sales_head', 'marketing_head'], true)) {
             abort(403, 'You are not authorized to manage users.');
         }
+    }
+
+    private function ensureCanManageTargetRole(string $actorRole, string $targetRoleKey): void
+    {
+        if ($actorRole === 'super_admin') {
+            return;
+        }
+
+        if ($actorRole === 'admin') {
+            if ($targetRoleKey === 'super_admin') {
+                abort(403, 'Admins cannot manage super admins.');
+            }
+            return;
+        }
+
+        if ($actorRole === 'sales_head') {
+            if (! in_array($targetRoleKey, ['advisor', 'psa'], true)) {
+                abort(403, 'Sales Heads can only manage Advisors and PSAs.');
+            }
+            return;
+        }
+
+        if ($actorRole === 'marketing_head') {
+            if ($targetRoleKey !== 'telecaller') {
+                abort(403, 'Marketing Heads can only manage Telecallers.');
+            }
+            return;
+        }
+
+        if (in_array($actorRole, ['dept_head', 'department_head'], true)) {
+            if (in_array($targetRoleKey, ['super_admin', 'admin', 'dept_head', 'department_head', 'sales_head', 'marketing_head'], true)) {
+                abort(403, 'Department Heads cannot manage admin or head roles.');
+            }
+            return;
+        }
+        
+        abort(403, 'You are not authorized to manage this role.');
     }
 
     private function ensureCanImpersonate(Request $request, User $target): User
@@ -225,6 +262,10 @@ class UserController extends Controller
             'password' => ['required', 'string', 'min:8'],
         ]);
 
+        $roleKey = (string) $data['role_key'];
+        $actorRole = $request->user()?->role?->key ?? '';
+        $this->ensureCanManageTargetRole($actorRole, $roleKey);
+
         $roleId = Role::query()->where('key', $data['role_key'])->value('id');
         if (! $roleId) {
             return response()->json(['message' => 'Invalid role'], 422);
@@ -269,6 +310,11 @@ class UserController extends Controller
     public function update(Request $request, User $user)
     {
         $this->ensureCanManageUsers($request);
+        $actorRole = $request->user()?->role?->key ?? '';
+        $user->loadMissing('role');
+        if ($user->role) {
+            $this->ensureCanManageTargetRole($actorRole, $user->role->key);
+        }
 
         $data = $request->validate([
             'first_name' => ['sometimes', 'required', 'string', 'max:80'],
@@ -297,6 +343,8 @@ class UserController extends Controller
         unset($data['department_ids'], $data['primary_department_id'], $data['department']);
 
         if (! empty($data['role_key'])) {
+            $this->ensureCanManageTargetRole($actorRole, $data['role_key']);
+            
             $roleId = Role::query()->where('key', $data['role_key'])->value('id');
             if (! $roleId) {
                 return response()->json(['message' => 'Invalid role'], 422);
@@ -341,6 +389,11 @@ class UserController extends Controller
     public function updateStatus(Request $request, User $user)
     {
         $this->ensureCanManageUsers($request);
+        $actorRole = $request->user()?->role?->key ?? '';
+        $user->loadMissing('role');
+        if ($user->role) {
+            $this->ensureCanManageTargetRole($actorRole, $user->role->key);
+        }
 
         $data = $request->validate([
             'status' => ['required', Rule::in(['active', 'inactive'])],
@@ -362,6 +415,11 @@ class UserController extends Controller
     public function resetPassword(Request $request, User $user)
     {
         $this->ensureCanManageUsers($request);
+        $actorRole = $request->user()?->role?->key ?? '';
+        $user->loadMissing('role');
+        if ($user->role) {
+            $this->ensureCanManageTargetRole($actorRole, $user->role->key);
+        }
 
         $data = $request->validate([
             'password' => ['required', 'string', 'min:8'],
@@ -412,6 +470,11 @@ class UserController extends Controller
         }
 
         $this->ensureCanManageUsers($request);
+        $actorRole = $request->user()?->role?->key ?? '';
+        $user->loadMissing('role');
+        if ($user->role) {
+            $this->ensureCanManageTargetRole($actorRole, $user->role->key);
+        }
 
         $reason = (string) $request->input('reason', '');
 
@@ -427,6 +490,11 @@ class UserController extends Controller
         $this->ensureCanManageUsers($request);
 
         $user = User::withTrashed()->findOrFail($id);
+        $actorRole = $request->user()?->role?->key ?? '';
+        $user->loadMissing('role');
+        if ($user->role) {
+            $this->ensureCanManageTargetRole($actorRole, $user->role->key);
+        }
         if ($request->user()?->id === $user->id) {
             return response()->json(['message' => 'You cannot permanently delete your own account.'], 422);
         }
@@ -669,6 +737,11 @@ class UserController extends Controller
         $this->ensureCanManageUsers($request);
 
         $user = User::withTrashed()->findOrFail($id);
+        $actorRole = $request->user()?->role?->key ?? '';
+        $user->loadMissing('role');
+        if ($user->role) {
+            $this->ensureCanManageTargetRole($actorRole, $user->role->key);
+        }
         if (!$user->trashed()) {
             return response()->json(['message' => 'User is not deleted.'], 422);
         }
@@ -685,9 +758,14 @@ class UserController extends Controller
     {
         $this->ensureCanManageUsers($request);
         $data = $request->validate(['ids' => 'required|array', 'ids.*' => 'integer']);
+        $actorRole = $request->user()?->role?->key ?? '';
 
         $users = User::whereIn('id', $data['ids'])->get();
         foreach ($users as $user) {
+            $user->loadMissing('role');
+            if ($user->role) {
+                $this->ensureCanManageTargetRole($actorRole, $user->role->key);
+            }
             $user->update(['status' => 'active']);
         }
 
@@ -698,9 +776,14 @@ class UserController extends Controller
     {
         $this->ensureCanManageUsers($request);
         $data = $request->validate(['ids' => 'required|array', 'ids.*' => 'integer']);
+        $actorRole = $request->user()?->role?->key ?? '';
 
         $users = User::whereIn('id', $data['ids'])->get();
         foreach ($users as $user) {
+            $user->loadMissing('role');
+            if ($user->role) {
+                $this->ensureCanManageTargetRole($actorRole, $user->role->key);
+            }
             $user->update(['status' => 'inactive']);
             $user->tokens()->delete();
         }
@@ -712,9 +795,14 @@ class UserController extends Controller
     {
         $this->ensureCanManageUsers($request);
         $data = $request->validate(['ids' => 'required|array', 'ids.*' => 'integer']);
+        $actorRole = $request->user()?->role?->key ?? '';
 
         $users = User::whereIn('id', $data['ids'])->get();
         foreach ($users as $user) {
+            $user->loadMissing('role');
+            if ($user->role) {
+                $this->ensureCanManageTargetRole($actorRole, $user->role->key);
+            }
             if ((int) $user->id !== (int) $request->user()?->id) {
                 $user->tokens()->delete();
                 $user->delete();
@@ -728,9 +816,14 @@ class UserController extends Controller
     {
         $this->ensureCanManageUsers($request);
         $data = $request->validate(['ids' => 'required|array', 'ids.*' => 'integer']);
+        $actorRole = $request->user()?->role?->key ?? '';
 
         $users = User::withTrashed()->whereIn('id', $data['ids'])->get();
         foreach ($users as $user) {
+            $user->loadMissing('role');
+            if ($user->role) {
+                $this->ensureCanManageTargetRole($actorRole, $user->role->key);
+            }
             if ($user->trashed()) {
                 $user->restore();
             }
