@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\UserTarget;
+use App\Services\SalesCapsuleService;
 use App\Services\TargetProgressService;
 use Illuminate\Http\Request;
 
@@ -26,8 +27,24 @@ class UserTargetController extends Controller
             abort(401);
         }
         $role = $user->role?->key;
-        if (!in_array($role, ['super_admin', 'admin', 'dept_head', 'sales_head'], true)) {
+        if (!in_array($role, ['super_admin', 'admin', 'dept_head', 'sales_head', 'team_lead'], true)) {
             abort(403, 'UNAUTHORIZED_TARGET_ACCESS');
+        }
+    }
+
+    /**
+     * Team leads may only manage targets for capsule members.
+     */
+    protected function assertCanTargetUser(Request $request, int $userId): void
+    {
+        $actor = $request->user()?->loadMissing('role');
+        if (($actor?->role?->key ?? '') !== 'team_lead') {
+            return;
+        }
+
+        $memberIds = app(SalesCapsuleService::class)->capsuleMemberIds($actor);
+        if (! in_array($userId, $memberIds, true)) {
+            abort(403, 'Team Leads can only set targets for their own PSA/Advisors.');
         }
     }
 
@@ -37,7 +54,14 @@ class UserTargetController extends Controller
 
         $query = UserTarget::with(['user.role', 'user.departments']);
 
+        $actor = $request->user()?->loadMissing('role');
+        if (($actor?->role?->key ?? '') === 'team_lead') {
+            $memberIds = app(SalesCapsuleService::class)->capsuleMemberIds($actor);
+            $query->whereIn('user_id', $memberIds === [] ? [0] : $memberIds);
+        }
+
         if ($request->has('user_id')) {
+            $this->assertCanTargetUser($request, (int) $request->user_id);
             $query->where('user_id', $request->user_id);
         }
         if ($request->has('month')) {
@@ -73,6 +97,8 @@ class UserTargetController extends Controller
             'year' => 'nullable|integer|min:2000|max:2100',
         ]);
 
+        $this->assertCanTargetUser($request, (int) $validated['user_id']);
+
         $userTarget = UserTarget::updateOrCreate(
             [
                 'user_id' => $validated['user_id'],
@@ -96,6 +122,7 @@ class UserTargetController extends Controller
     public function update(Request $request, UserTarget $userTarget)
     {
         $this->authorizeLeadership($request);
+        $this->assertCanTargetUser($request, (int) $userTarget->user_id);
 
         $validated = $request->validate([
             'target_type' => 'sometimes|string|max:255',
@@ -114,9 +141,10 @@ class UserTargetController extends Controller
         return response()->json($userTarget->load(['user.role', 'user.departments']));
     }
 
-    public function destroy(UserTarget $userTarget)
+    public function destroy(Request $request, UserTarget $userTarget)
     {
-        $this->authorizeLeadership($request ?? request());
+        $this->authorizeLeadership($request);
+        $this->assertCanTargetUser($request, (int) $userTarget->user_id);
 
         $userTarget->delete();
         return response()->noContent();

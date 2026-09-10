@@ -17,6 +17,7 @@ class RoleSeeder extends Seeder
             ['key' => 'admin', 'name' => 'Admin', 'permission_level' => 90],
             ['key' => 'dept_head', 'name' => 'Dept Head', 'permission_level' => 80],
             ['key' => 'sales_head', 'name' => 'Sales Head', 'permission_level' => 70],
+            ['key' => 'team_lead', 'name' => 'Team Lead', 'permission_level' => 55],
             ['key' => 'marketer', 'name' => 'Marketer', 'permission_level' => 40],
             ['key' => 'psa', 'name' => 'PSA', 'permission_level' => 30],
             ['key' => 'advisor', 'name' => 'Advisor', 'permission_level' => 20],

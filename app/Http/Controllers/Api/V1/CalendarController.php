@@ -6,13 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Assessment;
 use App\Models\Lead;
 use App\Models\Task;
+use App\Services\SalesCapsuleService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class CalendarController extends Controller
 {
-    private const TEAM_VIEW_ROLES = ['sales_head', 'admin', 'super_admin'];
+    private const TEAM_VIEW_ROLES = ['sales_head', 'team_lead', 'admin', 'super_admin'];
 
     private function actorRoleKey(Request $request): string
     {
@@ -48,6 +49,14 @@ class CalendarController extends Controller
 
         $canViewTeam = in_array($this->actorRoleKey($request), self::TEAM_VIEW_ROLES, true);
         $ownerId = $request->filled('owner_id') ? (int) $request->input('owner_id') : null;
+        $actor = $request->user()?->loadMissing('role');
+        $capsuleIds = null;
+        if (($actor?->role?->key ?? '') === 'team_lead') {
+            $capsuleIds = app(SalesCapsuleService::class)->capsuleMemberIds($actor);
+            if ($ownerId !== null && ! in_array($ownerId, $capsuleIds, true)) {
+                return response()->json(['data' => []]);
+            }
+        }
 
         // PSA / Advisor (and other non-team roles) are always scoped to themselves.
         if (! $canViewTeam) {
@@ -63,6 +72,7 @@ class CalendarController extends Controller
             $taskQuery = Task::query()
                 ->whereBetween('due_at', [$from, $to])
                 ->when($ownerId !== null, fn ($q) => $q->where('assigned_to', $ownerId))
+                ->when($capsuleIds !== null && $ownerId === null, fn ($q) => $q->whereIn('assigned_to', $capsuleIds === [] ? [0] : $capsuleIds))
                 ->when($statusFilter !== null, fn ($q) => $q->where('status', $statusFilter))
                 ->with([
                     'lead:id,student_name',
@@ -96,6 +106,16 @@ class CalendarController extends Controller
                             $ownerQ->where('owner_id', $ownerId)
                                 ->orWhere('psa_owner_id', $ownerId)
                                 ->orWhere('advisor_owner_id', $ownerId);
+                        });
+                    });
+                })
+                ->when($capsuleIds !== null && $ownerId === null, function ($q) use ($capsuleIds) {
+                    $ids = $capsuleIds === [] ? [0] : $capsuleIds;
+                    $q->whereHas('lead', function ($lq) use ($ids) {
+                        $lq->where(function ($ownerQ) use ($ids) {
+                            $ownerQ->whereIn('owner_id', $ids)
+                                ->orWhereIn('psa_owner_id', $ids)
+                                ->orWhereIn('advisor_owner_id', $ids);
                         });
                     });
                 })
@@ -133,6 +153,14 @@ class CalendarController extends Controller
                         $ownerQ->where('owner_id', $ownerId)
                             ->orWhere('psa_owner_id', $ownerId)
                             ->orWhere('advisor_owner_id', $ownerId);
+                    });
+                })
+                ->when($capsuleIds !== null && $ownerId === null, function ($q) use ($capsuleIds) {
+                    $ids = $capsuleIds === [] ? [0] : $capsuleIds;
+                    $q->where(function ($ownerQ) use ($ids) {
+                        $ownerQ->whereIn('owner_id', $ids)
+                            ->orWhereIn('psa_owner_id', $ids)
+                            ->orWhereIn('advisor_owner_id', $ids);
                     });
                 })
                 ->with(['owner:id,first_name,last_name'])

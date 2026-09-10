@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Enrollment;
 use App\Models\Payment;
+use App\Services\SalesCapsuleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -128,26 +129,45 @@ class PaymentController extends Controller
         $roleKey = $actor?->role?->key;
 
         if ($action === 'index') {
-            if (! in_array($roleKey, ['super_admin', 'admin', 'sales_head', 'advisor'], true)) {
+            if (! in_array($roleKey, ['super_admin', 'admin', 'sales_head', 'team_lead', 'advisor'], true)) {
                 abort(403, 'You are not authorized to view payments.');
             }
             if ($roleKey === 'advisor' && $enrollment && $enrollment->exists && (int) $enrollment->advisor_id !== (int) $actor->id) {
                 abort(403, 'You are not authorized to view payments for this enrollment.');
             }
+            if ($roleKey === 'team_lead' && $enrollment && $enrollment->exists && $actor) {
+                $memberIds = app(SalesCapsuleService::class)->capsuleMemberIds($actor);
+                if (! in_array((int) $enrollment->advisor_id, $memberIds, true)) {
+                    abort(403, 'You are not authorized to view payments for this enrollment.');
+                }
+            }
         } elseif ($action === 'store') {
-            if (! in_array($roleKey, ['super_admin', 'admin', 'sales_head', 'advisor'], true)) {
+            if (! in_array($roleKey, ['super_admin', 'admin', 'sales_head', 'team_lead', 'advisor'], true)) {
                 abort(403, 'You are not authorized to record payments.');
             }
             if ($roleKey === 'advisor' && $enrollment && (int) $enrollment->advisor_id !== (int) $actor->id) {
                 abort(403, 'You are not authorized to record payments for this enrollment.');
             }
+            if ($roleKey === 'team_lead' && $enrollment && $actor) {
+                $memberIds = app(SalesCapsuleService::class)->capsuleMemberIds($actor);
+                if (! in_array((int) $enrollment->advisor_id, $memberIds, true)) {
+                    abort(403, 'You are not authorized to record payments for this enrollment.');
+                }
+            }
         } elseif ($action === 'update') {
-            if (! in_array($roleKey, ['super_admin', 'admin', 'sales_head', 'advisor'], true)) {
+            if (! in_array($roleKey, ['super_admin', 'admin', 'sales_head', 'team_lead', 'advisor'], true)) {
                 abort(403, 'You are not authorized to update payments.');
             }
             if ($roleKey === 'advisor' && $payment) {
                 $enrollmentOfPayment = $payment->enrollment()->first();
                 if (! $enrollmentOfPayment || (int) $enrollmentOfPayment->advisor_id !== (int) $actor->id) {
+                    abort(403, 'You are not authorized to update this payment.');
+                }
+            }
+            if ($roleKey === 'team_lead' && $payment && $actor) {
+                $enrollmentOfPayment = $payment->enrollment()->first();
+                $memberIds = app(SalesCapsuleService::class)->capsuleMemberIds($actor);
+                if (! $enrollmentOfPayment || ! in_array((int) $enrollmentOfPayment->advisor_id, $memberIds, true)) {
                     abort(403, 'You are not authorized to update this payment.');
                 }
             }

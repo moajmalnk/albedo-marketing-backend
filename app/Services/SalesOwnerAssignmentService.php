@@ -15,7 +15,7 @@ class SalesOwnerAssignmentService
 {
     public const ALLOWED_OWNER_ROLES = ['advisor', 'psa'];
 
-    public const ALLOWED_ACTOR_ROLES = ['sales_head', 'admin', 'super_admin'];
+    public const ALLOWED_ACTOR_ROLES = ['sales_head', 'team_lead', 'admin', 'super_admin'];
 
     /**
      * @param  list<int>  $leadIds
@@ -23,6 +23,8 @@ class SalesOwnerAssignmentService
      */
     public function assignMany(array $leadIds, int $ownerId, ?User $actor = null, ?string $reason = null): Collection
     {
+        $this->assertActorCanAssign($actor);
+
         $owner = User::query()->with('role')->findOrFail($ownerId);
         $ownerRole = $owner->role?->key;
 
@@ -34,6 +36,13 @@ class SalesOwnerAssignmentService
             throw new InvalidArgumentException('Owner must be an active advisor or PSA.');
         }
 
+        if ($actor) {
+            $allowedOwnerIds = app(SalesCapsuleService::class)->assignableOwnerIds($actor);
+            if (is_array($allowedOwnerIds) && ! in_array((int) $owner->id, $allowedOwnerIds, true)) {
+                throw new InvalidArgumentException('Owner is outside your team capsule.');
+            }
+        }
+
         $stageKey = $ownerRole === 'advisor' ? 'advisor_counselling' : 'psa_recovery';
         $stage = LeadStage::query()->where('key', $stageKey)->first();
         if (! $stage) {
@@ -41,8 +50,8 @@ class SalesOwnerAssignmentService
         }
 
         $notes = $reason ?: ($ownerRole === 'advisor'
-            ? 'Sales head assigned advisor'
-            : 'Sales head assigned PSA');
+            ? 'Assigned advisor'
+            : 'Assigned PSA');
 
         return DB::transaction(function () use ($leadIds, $owner, $ownerRole, $stage, $actor, $notes) {
             $leads = Lead::query()->whereIn('id', $leadIds)->get();
@@ -126,7 +135,7 @@ class SalesOwnerAssignmentService
     {
         $roleKey = $actor?->role?->key;
         if (! in_array($roleKey, self::ALLOWED_ACTOR_ROLES, true)) {
-            throw new InvalidArgumentException('Only sales heads and admins can assign advisor/PSA owners.');
+            throw new InvalidArgumentException('Only sales heads, team leads, and admins can assign advisor/PSA owners.');
         }
     }
 }

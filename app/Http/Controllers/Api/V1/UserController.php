@@ -10,6 +10,7 @@ use App\Models\LeadActivity;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\WhatsAppSession;
+use App\Services\SalesCapsuleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -37,7 +38,7 @@ class UserController extends Controller
         $actor = $request->user()?->loadMissing('role');
         $roleKey = $actor?->role?->key;
 
-        if (! in_array($roleKey, ['super_admin', 'admin', 'dept_head', 'department_head', 'sales_head', 'marketing_head'], true)) {
+        if (! in_array($roleKey, ['super_admin', 'admin', 'dept_head', 'department_head', 'sales_head', 'marketing_head', 'team_lead'], true)) {
             abort(403, 'You are not authorized to manage users.');
         }
     }
@@ -56,8 +57,15 @@ class UserController extends Controller
         }
 
         if ($actorRole === 'sales_head') {
+            if (! in_array($targetRoleKey, ['team_lead', 'advisor', 'psa'], true)) {
+                abort(403, 'Sales Heads can only manage Team Leads, Advisors and PSAs.');
+            }
+            return;
+        }
+
+        if ($actorRole === 'team_lead') {
             if (! in_array($targetRoleKey, ['advisor', 'psa'], true)) {
-                abort(403, 'Sales Heads can only manage Advisors and PSAs.');
+                abort(403, 'Team Leads can only manage Advisors and PSAs.');
             }
             return;
         }
@@ -70,13 +78,69 @@ class UserController extends Controller
         }
 
         if (in_array($actorRole, ['dept_head', 'department_head'], true)) {
-            if (in_array($targetRoleKey, ['super_admin', 'admin', 'dept_head', 'department_head', 'sales_head', 'marketing_head'], true)) {
+            if (in_array($targetRoleKey, ['super_admin', 'admin', 'dept_head', 'department_head', 'sales_head', 'marketing_head', 'team_lead'], true)) {
                 abort(403, 'Department Heads cannot manage admin or head roles.');
             }
             return;
         }
         
         abort(403, 'You are not authorized to manage this role.');
+    }
+
+    private function assertCapsuleManageAccess(Request $request, User $target, bool $isCreate = false): void
+    {
+        $actor = $request->user()?->loadMissing('role');
+        if (! $actor) {
+            abort(401);
+        }
+
+        $actorRole = $actor->role?->key ?? '';
+        if (! in_array($actorRole, ['team_lead', 'sales_head'], true)) {
+            return;
+        }
+
+        if ((int) $actor->id === (int) $target->id) {
+            return;
+        }
+
+        $target->loadMissing('role');
+        $capsules = app(SalesCapsuleService::class);
+
+        if ($isCreate) {
+            return;
+        }
+
+        if ($actorRole === 'sales_head') {
+            $targetRole = $target->role?->key ?? '';
+            if (! in_array($targetRole, ['team_lead', 'psa', 'advisor'], true)) {
+                abort(403, 'Sales Heads can only manage Team Leads, Advisors and PSAs.');
+            }
+
+            return;
+        }
+
+        if ($actorRole === 'team_lead' && ! $capsules->canManageCapsuleTarget($actor, $target)) {
+            abort(403, 'Team Leads can only manage PSA/Advisors in their own capsule.');
+        }
+    }
+
+    /**
+     * Force reporting_manager_id for capsule integrity when sales actors create/update members.
+     */
+    private function resolveReportingManagerId(Request $request, string $targetRoleKey, ?int $requestedManagerId): ?int
+    {
+        $actor = $request->user()?->loadMissing('role');
+        $actorRole = $actor?->role?->key ?? '';
+
+        if ($actorRole === 'team_lead' && in_array($targetRoleKey, ['psa', 'advisor'], true)) {
+            return (int) $actor->id;
+        }
+
+        if ($actorRole === 'sales_head' && $targetRoleKey === 'team_lead') {
+            return $requestedManagerId ?? (int) $actor->id;
+        }
+
+        return $requestedManagerId;
     }
 
     private function ensureCanImpersonate(Request $request, User $target): User
@@ -175,6 +239,7 @@ class UserController extends Controller
         $query = User::query()
             ->with(['role', 'manager:id,first_name,last_name', 'departments']);
 
+        // Sales heads and team leads can browse the full roster; edit/detail remain gated.
         $sortBy = $request->string('sort_by', 'id')->toString();
         $sortDesc = $request->boolean('sort_desc', false);
         $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
@@ -235,6 +300,7 @@ class UserController extends Controller
     public function show(Request $request, User $user)
     {
         $this->ensureCanManageUsers($request);
+        $this->assertCapsuleManageAccess($request, $user);
         $user->load(['role', 'manager:id,first_name,last_name', 'departments']);
 
         return response()->json($this->appendIsOnline($user));
@@ -276,6 +342,12 @@ class UserController extends Controller
         $legacyDepartmentCode = $data['department'] ?? null;
         unset($data['department_ids'], $data['primary_department_id'], $data['department']);
 
+        $reportingManagerId = $this->resolveReportingManagerId(
+            $request,
+            $roleKey,
+            isset($data['reporting_manager_id']) ? (int) $data['reporting_manager_id'] : null
+        );
+
         $user = User::query()->create($this->onlyExistingUserColumns([
             'first_name' => $data['first_name'],
             'last_name' => $data['last_name'] ?? null,
@@ -287,7 +359,7 @@ class UserController extends Controller
             'sub_brand' => $data['sub_brand'] ?? null,
             'address' => $data['address'] ?? null,
             'notes' => $data['notes'] ?? null,
-            'reporting_manager_id' => $data['reporting_manager_id'] ?? null,
+            'reporting_manager_id' => $reportingManagerId,
             'status' => 'active',
             'password_hash' => Hash::make($data['password']),
         ]));
@@ -315,6 +387,7 @@ class UserController extends Controller
         if ($user->role) {
             $this->ensureCanManageTargetRole($actorRole, $user->role->key);
         }
+        $this->assertCapsuleManageAccess($request, $user);
 
         $data = $request->validate([
             'first_name' => ['sometimes', 'required', 'string', 'max:80'],
@@ -350,6 +423,17 @@ class UserController extends Controller
                 return response()->json(['message' => 'Invalid role'], 422);
             }
             $data['role_id'] = $roleId;
+        }
+
+        $effectiveRoleKey = (string) ($data['role_key'] ?? $user->role?->key ?? '');
+        if (array_key_exists('reporting_manager_id', $data) || $actorRole === 'team_lead' || ($actorRole === 'sales_head' && $effectiveRoleKey === 'team_lead')) {
+            $data['reporting_manager_id'] = $this->resolveReportingManagerId(
+                $request,
+                $effectiveRoleKey,
+                array_key_exists('reporting_manager_id', $data)
+                    ? ($data['reporting_manager_id'] !== null ? (int) $data['reporting_manager_id'] : null)
+                    : ($user->reporting_manager_id !== null ? (int) $user->reporting_manager_id : null)
+            );
         }
 
         unset($data['role_key']);
@@ -656,13 +740,24 @@ class UserController extends Controller
             $keys = array_values(array_filter(array_map('trim', explode(',', $keys))));
         }
         if (! is_array($keys) || $keys === []) {
-            $keys = ['super_admin', 'admin', 'marketer', 'dept_head', 'telecaller', 'psa', 'advisor', 'sales_head'];
+            $keys = ['super_admin', 'admin', 'marketer', 'dept_head', 'telecaller', 'psa', 'advisor', 'sales_head', 'team_lead'];
         }
 
-        $users = User::query()
+        $query = User::query()
             ->with(['role:id,key'])
             ->where('status', 'active')
-            ->whereHas('role', fn ($q) => $q->whereIn('key', $keys))
+            ->whereHas('role', fn ($q) => $q->whereIn('key', $keys));
+
+        $onlySalesStaff = $keys !== [] && empty(array_diff($keys, ['psa', 'advisor']));
+        if ($onlySalesStaff) {
+            $actor = $request->user()?->loadMissing('role');
+            $staffIds = $actor ? app(SalesCapsuleService::class)->visibleSalesStaffIds($actor) : null;
+            if (is_array($staffIds)) {
+                $query->whereIn('id', $staffIds === [] ? [0] : $staffIds);
+            }
+        }
+
+        $users = $query
             ->orderBy('first_name')
             ->orderBy('last_name')
             ->get(['id', 'first_name', 'last_name', 'email', 'role_id', 'department']);
@@ -697,9 +792,17 @@ class UserController extends Controller
     {
         $today = now()->toDateString();
         
-        $psas = User::query()
+        $query = User::query()
             ->whereHas('role', fn ($q) => $q->where('key', 'psa'))
-            ->where('status', 'active')
+            ->where('status', 'active');
+
+        $actor = $request->user()?->loadMissing('role');
+        $staffIds = $actor ? app(SalesCapsuleService::class)->visibleSalesStaffIds($actor) : null;
+        if (is_array($staffIds)) {
+            $query->whereIn('id', $staffIds === [] ? [0] : $staffIds);
+        }
+
+        $psas = $query
             ->withCount([
                 'leads as active_leads_count' => function ($q) {
                     $q->whereNull('closed_at');
@@ -720,9 +823,17 @@ class UserController extends Controller
     {
         $today = now()->toDateString();
 
-        $advisors = User::query()
+        $query = User::query()
             ->whereHas('role', fn ($q) => $q->where('key', 'advisor'))
-            ->where('status', 'active')
+            ->where('status', 'active');
+
+        $actor = $request->user()?->loadMissing('role');
+        $staffIds = $actor ? app(SalesCapsuleService::class)->visibleSalesStaffIds($actor) : null;
+        if (is_array($staffIds)) {
+            $query->whereIn('id', $staffIds === [] ? [0] : $staffIds);
+        }
+
+        $advisors = $query
             ->withCount([
                 'leads as active_leads_count' => function ($q) {
                     $q->whereNull('closed_at');

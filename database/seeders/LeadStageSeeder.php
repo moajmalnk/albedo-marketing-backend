@@ -215,14 +215,15 @@ class LeadStageSeeder extends Seeder
 
         // 4. Permission Matrix (lead_stage_permissions)
         if (Schema::hasTable('lead_stage_permissions')) {
-            $roles = ['super_admin', 'admin', 'sales_head', 'department_head', 'telecaller', 'psa', 'advisor', 'marketer'];
+            $roles = ['super_admin', 'admin', 'sales_head', 'team_lead', 'department_head', 'telecaller', 'psa', 'advisor', 'marketer'];
             foreach ($stageMap as $stage) {
                 foreach ($roles as $role) {
                     $isSuperOrHead = in_array($role, ['super_admin', 'admin', 'sales_head', 'department_head'], true);
+                    $isTeamLead = $role === 'team_lead';
                     $isOwnerRole = ($stage->owner_role === $role);
 
                     $canView = true;
-                    if ($role === 'sales_head') {
+                    if ($role === 'sales_head' || $isTeamLead) {
                         // Include qualified (order 3) so sales-head-created / telecaller-handoff leads are listable.
                         $canView = $stage->order >= 3;
                     }
@@ -232,9 +233,9 @@ class LeadStageSeeder extends Seeder
                         'role' => $role,
                     ], [
                         'can_view' => $canView,
-                        'can_move' => $isSuperOrHead || $isOwnerRole,
+                        'can_move' => $isSuperOrHead || $isTeamLead || $isOwnerRole,
                         'can_override' => $isSuperOrHead,
-                        'can_close' => $isSuperOrHead || $isOwnerRole,
+                        'can_close' => $isSuperOrHead || $isTeamLead || $isOwnerRole,
                         'can_reopen' => $isSuperOrHead,
                         'can_delete' => in_array($role, ['super_admin', 'admin'], true),
                     ]);

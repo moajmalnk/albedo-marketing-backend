@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Enrollment;
 use App\Models\Lead;
 use App\Models\LeadStage;
+use App\Services\SalesCapsuleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -39,6 +40,10 @@ class EnrollmentController extends Controller
                 'payments',
             ])
             ->when($roleKey === 'advisor', fn ($q) => $q->where('advisor_id', $actor->id))
+            ->when($roleKey === 'team_lead' && $actor, function ($q) use ($actor) {
+                $memberIds = app(SalesCapsuleService::class)->capsuleMemberIds($actor);
+                $q->whereIn('advisor_id', $memberIds === [] ? [0] : $memberIds);
+            })
             ->when($request->filled('advisor_id') && $roleKey !== 'advisor', fn ($q) => $q->where('advisor_id', (int) $request->input('advisor_id')))
             ->when($request->filled('lead_id'), fn ($q) => $q->where('lead_id', (int) $request->input('lead_id')))
             ->when($request->filled('admission_status'), fn ($q) => $q->where('admission_status', $request->string('admission_status')))
@@ -136,19 +141,25 @@ class EnrollmentController extends Controller
         $roleKey = $actor?->role?->key;
 
         if ($action === 'index') {
-            if (! in_array($roleKey, ['super_admin', 'admin', 'sales_head', 'advisor'], true)) {
+            if (! in_array($roleKey, ['super_admin', 'admin', 'sales_head', 'team_lead', 'advisor'], true)) {
                 abort(403, 'You are not authorized to view enrollments.');
             }
         } elseif ($action === 'store') {
-            if (! in_array($roleKey, ['super_admin', 'admin', 'sales_head', 'advisor', 'telecaller'], true)) {
+            if (! in_array($roleKey, ['super_admin', 'admin', 'sales_head', 'team_lead', 'advisor', 'telecaller'], true)) {
                 abort(403, 'You are not authorized to create enrollments.');
             }
         } elseif ($action === 'show' || $action === 'update') {
-            if (! in_array($roleKey, ['super_admin', 'admin', 'sales_head', 'advisor'], true)) {
+            if (! in_array($roleKey, ['super_admin', 'admin', 'sales_head', 'team_lead', 'advisor'], true)) {
                 abort(403, "You are not authorized to {$action} this enrollment.");
             }
             if ($roleKey === 'advisor' && $enrollment && (int) $enrollment->advisor_id !== (int) $actor->id) {
                 abort(403, "You are not authorized to {$action} this enrollment.");
+            }
+            if ($roleKey === 'team_lead' && $enrollment && $actor) {
+                $memberIds = app(SalesCapsuleService::class)->capsuleMemberIds($actor);
+                if (! in_array((int) $enrollment->advisor_id, $memberIds, true)) {
+                    abort(403, "You are not authorized to {$action} this enrollment.");
+                }
             }
         } elseif ($action === 'destroy') {
             if (! in_array($roleKey, ['super_admin', 'admin', 'sales_head'], true)) {

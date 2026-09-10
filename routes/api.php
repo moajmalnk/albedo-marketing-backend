@@ -275,7 +275,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/analytics/role-summary', [AnalyticsController::class, 'roleSummary']);
         Route::get('/analytics/team-insights', [AnalyticsController::class, 'teamInsights']);
 
-        Route::middleware('role:super_admin,admin,sales_head,psa,advisor')->group(function (): void {
+        Route::middleware('role:super_admin,admin,sales_head,team_lead,psa,advisor')->group(function (): void {
             Route::apiResource('enrollments', EnrollmentController::class);
             Route::get('/enrollments/{enrollment}/payments', [PaymentController::class, 'index']);
             Route::post('/enrollments/{enrollment}/payments', [PaymentController::class, 'store']);

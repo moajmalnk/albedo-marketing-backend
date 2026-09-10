@@ -170,18 +170,19 @@ class LeadStageEngineSeeder extends Seeder
             $stage = LeadStage::create($stageData);
 
             // Default permissions for all core roles
-            $roles = ['super_admin', 'admin', 'sales_head', 'department_head', 'telecaller', 'psa', 'advisor', 'marketer'];
+            $roles = ['super_admin', 'admin', 'sales_head', 'team_lead', 'department_head', 'telecaller', 'psa', 'advisor', 'marketer'];
             foreach ($roles as $role) {
                 $isSuperOrHead = in_array($role, ['super_admin', 'admin', 'sales_head', 'department_head'], true);
+                $isTeamLead = $role === 'team_lead';
                 $isOwnerRole = ($stage->owner_role === $role);
                 
                 LeadStagePermission::create([
                     'lead_stage_id' => $stage->id,
                     'role' => $role,
                     'can_view' => true,
-                    'can_move' => $isSuperOrHead || $isOwnerRole,
+                    'can_move' => $isSuperOrHead || $isTeamLead || $isOwnerRole,
                     'can_override' => $isSuperOrHead,
-                    'can_close' => $isSuperOrHead || $isOwnerRole,
+                    'can_close' => $isSuperOrHead || $isTeamLead || $isOwnerRole,
                     'can_reopen' => $isSuperOrHead,
                     'can_delete' => in_array($role, ['super_admin', 'admin'], true),
                 ]);

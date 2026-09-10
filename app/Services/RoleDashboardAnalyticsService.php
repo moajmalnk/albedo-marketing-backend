@@ -33,7 +33,7 @@ class RoleDashboardAnalyticsService
         if (in_array($key, ['dept_head', 'department_head'], true)) {
             return $this->deptHead($user, $request);
         }
-        if (in_array($key, ['sales_head', 'psa', 'advisor'], true)) {
+        if (in_array($key, ['sales_head', 'team_lead', 'psa', 'advisor'], true)) {
             return $this->salesRole($user, (string) $key);
         }
 
@@ -255,15 +255,31 @@ class RoleDashboardAnalyticsService
      */
     private function salesRole(User $user, string $key): array
     {
+        $memberIds = $key === 'team_lead'
+            ? app(SalesCapsuleService::class)->capsuleMemberIds($user)
+            : null;
+
         $base = Lead::query();
         if ($key === 'advisor') {
             $base->where('owner_id', $user->id);
+        } elseif ($key === 'team_lead') {
+            app(SalesCapsuleService::class)->applyTeamLeadLeadScope($base, $user);
         }
 
         // Optimize: Fetch all counts in a single query using Join
         $stageCounts = DB::table('leads')
             ->join('lead_stages', 'leads.stage_id', '=', 'lead_stages.id')
             ->when($key === 'advisor', fn ($q) => $q->where('leads.owner_id', $user->id))
+            ->when($key === 'team_lead', function ($q) use ($memberIds) {
+                $q->where(function ($scope) use ($memberIds) {
+                    $scope->whereNull('leads.owner_id');
+                    if ($memberIds !== []) {
+                        $scope->orWhereIn('leads.owner_id', $memberIds)
+                            ->orWhereIn('leads.psa_owner_id', $memberIds)
+                            ->orWhereIn('leads.advisor_owner_id', $memberIds);
+                    }
+                });
+            })
             ->select('lead_stages.key')
             ->selectRaw('COUNT(*) as count')
             ->groupBy('lead_stages.key')
@@ -292,6 +308,9 @@ class RoleDashboardAnalyticsService
         $recentActivities = LeadActivity::query()
             ->with(['lead' => fn ($q) => $q->select('id', 'student_name', 'phone')])
             ->when($key === 'advisor', fn (Builder $q) => $q->where('user_id', $user->id))
+            ->when($key === 'team_lead' && $memberIds !== null, function (Builder $q) use ($memberIds) {
+                $q->whereIn('user_id', $memberIds === [] ? [0] : $memberIds);
+            })
             ->orderByDesc('occurred_at')
             ->limit(12)
             ->get()

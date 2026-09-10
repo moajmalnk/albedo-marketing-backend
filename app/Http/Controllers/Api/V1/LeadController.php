@@ -101,6 +101,11 @@ class LeadController extends Controller
                         ->orWhereNull('owner_id');
                 });
             }
+        } elseif ($roleKey === 'team_lead') {
+            $query->whereHas('stage', function ($q) {
+                $q->where('team', 'sales');
+            });
+            app(\App\Services\SalesCapsuleService::class)->applyTeamLeadLeadScope($query, $user);
         } elseif (in_array($roleKey, ['sales_head', 'advisor', 'psa'], true)) {
             $query->whereHas('stage', function ($q) {
                 $q->where('team', 'sales');
@@ -531,7 +536,7 @@ class LeadController extends Controller
         $creator?->loadMissing('role');
         $roleKey = $creator?->role?->key;
 
-        if (in_array($roleKey, ['sales_head', 'advisor', 'psa'], true)) {
+        if (in_array($roleKey, ['sales_head', 'team_lead', 'advisor', 'psa'], true)) {
             $initialStage = LeadStage::query()
                 ->active()
                 ->where('team', 'sales')
@@ -618,7 +623,7 @@ class LeadController extends Controller
         $userRole = $user?->role?->key ?? 'telecaller';
         $isAdmin = in_array($userRole, ['super_admin', 'admin', 'dept_head'], true);
         $isMarketing = in_array($userRole, ['telecaller', 'marketer'], true);
-        $isSales = in_array($userRole, ['sales_head', 'advisor', 'psa'], true);
+        $isSales = in_array($userRole, ['sales_head', 'team_lead', 'advisor', 'psa'], true);
 
         // A. Handle Closing the Lead via closed_reason_key. Closure is independent from the active pipeline.
         if (! empty($data['closed_reason_key'])) {

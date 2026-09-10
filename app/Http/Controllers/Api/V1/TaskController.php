@@ -5,12 +5,13 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Lead;
 use App\Models\Task;
+use App\Services\SalesCapsuleService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class TaskController extends Controller
 {
-    private const SALES_TASK_ACTOR_ROLES = ['sales_head', 'admin', 'super_admin'];
+    private const SALES_TASK_ACTOR_ROLES = ['sales_head', 'team_lead', 'admin', 'super_admin'];
 
     private function taskRelations(): array
     {
@@ -29,7 +30,7 @@ class TaskController extends Controller
     private function assertCanManageSalesTasks(Request $request): void
     {
         if (! in_array($this->actorRoleKey($request), self::SALES_TASK_ACTOR_ROLES, true)) {
-            abort(403, 'Only sales heads and admins can create callback tasks for advisor/PSA owners.');
+            abort(403, 'Only sales heads, team leads, and admins can create callback tasks for advisor/PSA owners.');
         }
     }
 
@@ -56,6 +57,12 @@ class TaskController extends Controller
             ->orderByRaw('CASE WHEN status = "completed" THEN 1 ELSE 0 END')
             ->orderBy('due_at')
             ->orderBy('id');
+
+        $actor = $request->user()?->loadMissing('role');
+        if (($actor?->role?->key ?? '') === 'team_lead') {
+            $memberIds = app(SalesCapsuleService::class)->capsuleMemberIds($actor);
+            $query->whereIn('assigned_to', $memberIds === [] ? [0] : $memberIds);
+        }
 
         $limit = (int) $request->input('limit', 50);
         $limit = max(1, min(100, $limit));
@@ -109,6 +116,9 @@ class TaskController extends Controller
         $created = [];
         $failed = [];
 
+        $actor = $request->user()?->loadMissing('role');
+        $allowedAssignees = $actor ? app(SalesCapsuleService::class)->assignableOwnerIds($actor) : null;
+
         $leads = Lead::query()
             ->whereIn('id', $data['lead_ids'])
             ->get(['id', 'student_name', 'advisor_owner_id', 'psa_owner_id'])
@@ -128,6 +138,14 @@ class TaskController extends Controller
                     'reason' => $role === 'advisor'
                         ? 'No advisor assigned to this lead'
                         : 'No PSA assigned to this lead',
+                ];
+                continue;
+            }
+
+            if (is_array($allowedAssignees) && ! in_array((int) $assignedTo, $allowedAssignees, true)) {
+                $failed[] = [
+                    'lead_id' => $leadId,
+                    'reason' => 'Assignee is outside your team capsule',
                 ];
                 continue;
             }

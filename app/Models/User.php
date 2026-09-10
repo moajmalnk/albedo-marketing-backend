@@ -101,6 +101,31 @@ class User extends Authenticatable
         return $this->belongsTo(User::class, 'reporting_manager_id');
     }
 
+    public function directReports(): HasMany
+    {
+        return $this->hasMany(User::class, 'reporting_manager_id');
+    }
+
+    /**
+     * Active PSA/advisor IDs reporting to this user (team-lead capsule).
+     *
+     * @return list<int>
+     */
+    public function capsuleMemberIds(): array
+    {
+        return app(\App\Services\SalesCapsuleService::class)->capsuleMemberIds($this);
+    }
+
+    /**
+     * Team leads + PSA/advisors under this sales head (subtree).
+     *
+     * @return list<int>
+     */
+    public function salesSubtreeMemberIds(): array
+    {
+        return app(\App\Services\SalesCapsuleService::class)->salesSubtreeMemberIds($this);
+    }
+
     /**
      * @return BelongsToMany<Department, $this>
      */
