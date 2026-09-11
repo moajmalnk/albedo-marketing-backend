@@ -226,6 +226,13 @@ Route::prefix('v1')->group(function (): void {
                 Route::delete('/leads/{lead}/documents/{document}', [\App\Http\Controllers\Api\V1\LeadDocumentController::class, 'destroy']);
                 Route::get('/leads/{lead}/documents/{document}/download', [\App\Http\Controllers\Api\V1\LeadDocumentController::class, 'download']);
 
+                // Lead Invoice (one per lead)
+                Route::get('/leads/{lead}/invoice', [\App\Http\Controllers\Api\V1\InvoiceController::class, 'show']);
+                Route::post('/leads/{lead}/invoice', [\App\Http\Controllers\Api\V1\InvoiceController::class, 'store']);
+                Route::put('/leads/{lead}/invoice', [\App\Http\Controllers\Api\V1\InvoiceController::class, 'update']);
+                Route::patch('/leads/{lead}/invoice', [\App\Http\Controllers\Api\V1\InvoiceController::class, 'update']);
+                Route::get('/leads/{lead}/invoice/pdf', [\App\Http\Controllers\Api\V1\InvoiceController::class, 'pdf']);
+
                 // Imported Leads and Marketing Recycle Bin Routes
                 Route::get('/imported-leads/assigned-history', [\App\Http\Controllers\Api\V1\ImportedLeadController::class, 'assignedHistory']);
                 Route::get('/imported-leads', [\App\Http\Controllers\Api\V1\ImportedLeadController::class, 'index']);

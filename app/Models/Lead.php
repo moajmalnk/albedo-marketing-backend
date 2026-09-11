@@ -7,6 +7,7 @@ use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Lead extends Model
@@ -124,4 +125,9 @@ class Lead extends Model
     public function activities(): HasMany { return $this->hasMany(LeadActivity::class); }
     public function transitions(): HasMany { return $this->hasMany(LeadStageTransition::class); }
     public function documents(): HasMany { return $this->hasMany(LeadDocument::class); }
+
+    public function invoice(): HasOne
+    {
+        return $this->hasOne(Invoice::class);
+    }
 }

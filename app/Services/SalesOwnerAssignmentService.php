@@ -4,8 +4,6 @@ namespace App\Services;
 
 use App\Models\Lead;
 use App\Models\LeadActivity;
-use App\Models\LeadStage;
-use App\Models\LeadStageTransition;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -43,22 +41,16 @@ class SalesOwnerAssignmentService
             }
         }
 
-        $stageKey = $ownerRole === 'advisor' ? 'advisor_counselling' : 'psa_recovery';
-        $stage = LeadStage::query()->where('key', $stageKey)->first();
-        if (! $stage) {
-            throw new InvalidArgumentException("Required stage '{$stageKey}' is not configured.");
-        }
-
         $notes = $reason ?: ($ownerRole === 'advisor'
             ? 'Assigned advisor'
             : 'Assigned PSA');
 
-        return DB::transaction(function () use ($leadIds, $owner, $ownerRole, $stage, $actor, $notes) {
+        return DB::transaction(function () use ($leadIds, $owner, $ownerRole, $actor, $notes) {
             $leads = Lead::query()->whereIn('id', $leadIds)->get();
             $updated = collect();
 
             foreach ($leads as $lead) {
-                $updated->push($this->assignOne($lead, $owner, $ownerRole, $stage, $actor, $notes));
+                $updated->push($this->assignOne($lead, $owner, $ownerRole, $actor, $notes));
             }
 
             return $updated;
@@ -69,7 +61,6 @@ class SalesOwnerAssignmentService
         Lead $lead,
         User $owner,
         string $ownerRole,
-        LeadStage $stage,
         ?User $actor = null,
         ?string $reason = null
     ): Lead {
@@ -79,8 +70,6 @@ class SalesOwnerAssignmentService
 
         $lead->assignment_type = $isReassign ? 'Sales Reassignment' : 'Initial Sales Assignment';
         $lead->assignment_reason = $notes;
-
-        $fromStageId = $lead->stage_id;
 
         $payload = [
             'owner_id' => $owner->id,
@@ -93,21 +82,9 @@ class SalesOwnerAssignmentService
             'assignment_notes' => $notes,
             'routing_failed' => false,
             'assigned_dept' => 'SALES',
-            'stage_id' => $stage->id,
         ];
 
         $lead->update($payload);
-
-        if ($fromStageId !== $stage->id) {
-            LeadStageTransition::create([
-                'lead_id' => $lead->id,
-                'from_stage_id' => $fromStageId,
-                'to_stage_id' => $stage->id,
-                'reason' => $notes,
-                'changed_by' => $actor?->id ?? auth()->id(),
-                'changed_at' => now(),
-            ]);
-        }
 
         LeadActivity::query()->create([
             'lead_id' => $lead->id,
@@ -122,7 +99,7 @@ class SalesOwnerAssignmentService
                 'new_owner_id' => $owner->id,
                 'owner_role' => $ownerRole,
                 'owner_name' => trim(implode(' ', array_filter([$owner->first_name, $owner->last_name]))) ?: $owner->email,
-                'stage_key' => $stage->key,
+                'stage_id' => $lead->stage_id,
                 'is_reassign' => $isReassign,
             ],
             'occurred_at' => now(),
