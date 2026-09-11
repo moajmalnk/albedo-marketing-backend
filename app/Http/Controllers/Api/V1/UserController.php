@@ -744,7 +744,7 @@ class UserController extends Controller
         }
 
         $query = User::query()
-            ->with(['role:id,key'])
+            ->with(['role:id,key,name'])
             ->where('status', 'active')
             ->whereHas('role', fn ($q) => $q->whereIn('key', $keys));
 
