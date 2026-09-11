@@ -84,4 +84,31 @@ class LeadChannelClassifier
             };
         });
     }
+
+    /** @param  list<string>  $channels */
+    public static function applyChannelFilters(Builder $query, array $channels): void
+    {
+        $channels = array_values(array_filter(array_map(
+            static fn ($c) => is_string($c) ? trim($c) : '',
+            $channels
+        ), static fn ($c) => $c !== '' && strcasecmp($c, 'All') !== 0));
+
+        if ($channels === []) {
+            return;
+        }
+
+        if (count($channels) === 1) {
+            self::applyChannelFilter($query, $channels[0]);
+
+            return;
+        }
+
+        $query->where(function (Builder $outer) use ($channels) {
+            foreach ($channels as $channel) {
+                $outer->orWhere(function (Builder $q) use ($channel) {
+                    self::applyChannelFilter($q, $channel);
+                });
+            }
+        });
+    }
 }

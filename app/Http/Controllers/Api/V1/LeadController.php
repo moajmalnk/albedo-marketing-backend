@@ -214,20 +214,29 @@ class LeadController extends Controller
         if ($request->filled('stage')) {
             $query->whereHas('stage', fn ($q) => $q->where('key', $request->string('stage')));
         }
-        if ($request->filled('source_code')) {
-            $query->where('source_code', $request->string('source_code'));
+        $sourceCodes = $this->csvFilterValues($request, 'source_codes');
+        if ($sourceCodes === []) {
+            $sourceCodes = $this->csvFilterValues($request, 'source_code');
         }
-        if ($request->filled('owner_id')) {
-            $query->where('owner_id', (int) $request->input('owner_id'));
+        if ($sourceCodes !== []) {
+            $query->whereIn('source_code', $sourceCodes);
         }
-        if ($request->filled('telecaller_owner_id')) {
-            $query->where('telecaller_owner_id', (int) $request->input('telecaller_owner_id'));
+
+        $ownerIds = array_values(array_filter(array_map('intval', $this->csvFilterValues($request, 'owner_id'))));
+        if ($ownerIds !== []) {
+            $query->whereIn('owner_id', $ownerIds);
         }
-        if ($request->filled('psa_owner_id')) {
-            $query->where('psa_owner_id', (int) $request->input('psa_owner_id'));
+        $telecallerIds = array_values(array_filter(array_map('intval', $this->csvFilterValues($request, 'telecaller_owner_id'))));
+        if ($telecallerIds !== []) {
+            $query->whereIn('telecaller_owner_id', $telecallerIds);
         }
-        if ($request->filled('advisor_owner_id')) {
-            $query->where('advisor_owner_id', (int) $request->input('advisor_owner_id'));
+        $psaIds = array_values(array_filter(array_map('intval', $this->csvFilterValues($request, 'psa_owner_id'))));
+        if ($psaIds !== []) {
+            $query->whereIn('psa_owner_id', $psaIds);
+        }
+        $advisorIds = array_values(array_filter(array_map('intval', $this->csvFilterValues($request, 'advisor_owner_id'))));
+        if ($advisorIds !== []) {
+            $query->whereIn('advisor_owner_id', $advisorIds);
         }
         if ($request->boolean('unassigned')) {
             $query->whereNull('owner_id');
@@ -235,62 +244,64 @@ class LeadController extends Controller
         if ($request->boolean('assigned_only')) {
             $query->whereNotNull('owner_id');
         }
-        if ($request->filled('source_codes')) {
-            $codes = array_values(array_filter(array_map('trim', explode(',', (string) $request->input('source_codes')))));
-            if ($codes !== []) {
-                $query->whereIn('source_code', $codes);
-            }
+        $courses = $this->csvFilterValues($request, 'course');
+        if ($courses !== []) {
+            $query->whereIn('course', $courses);
         }
-        if ($request->filled('course')) {
-            $query->where('course', $request->string('course'));
+        $syllabi = $this->csvFilterValues($request, 'syllabus');
+        if ($syllabi !== []) {
+            $query->whereIn('syllabus', $syllabi);
         }
-        if ($request->filled('syllabus')) {
-            $query->where('syllabus', $request->string('syllabus'));
+        $classes = $this->csvFilterValues($request, 'class');
+        if ($classes !== []) {
+            $query->whereIn('class', $classes);
         }
-        if ($request->filled('class')) {
-            $query->where('class', $request->string('class'));
+        $states = $this->csvFilterValues($request, 'state');
+        if ($states !== []) {
+            $query->whereIn('state', $states);
         }
-        if ($request->filled('state')) {
-            $query->where('state', $request->string('state'));
-        }
-        if ($request->filled('district')) {
-            $query->where(function (Builder $q) use ($request) {
-                $district = (string) $request->string('district');
-                $q->where('district', $district)->orWhere('city', $district);
+        $districts = $this->csvFilterValues($request, 'district');
+        if ($districts !== []) {
+            $query->where(function (Builder $q) use ($districts) {
+                $q->whereIn('district', $districts)->orWhereIn('city', $districts);
             });
         }
-        if ($request->filled('campaign')) {
-            $campaign = (string) $request->string('campaign');
-            $query->where(function (Builder $q) use ($campaign) {
-                $q->where('campaign', $campaign)
-                    ->orWhere('campaign', 'like', '%'.$campaign.'%');
+        $campaigns = $this->csvFilterValues($request, 'campaign');
+        if ($campaigns !== []) {
+            $query->where(function (Builder $q) use ($campaigns) {
+                $q->whereIn('campaign', $campaigns);
+                foreach ($campaigns as $campaign) {
+                    $q->orWhere('campaign', 'like', '%'.$campaign.'%');
+                }
             });
         }
-        if ($request->filled('utm_medium')) {
-            // utm_medium is not a first-class column; match campaign/connected_by loosely
-            $medium = (string) $request->string('utm_medium');
-            $query->where(function (Builder $q) use ($medium) {
-                $q->where('campaign', 'like', '%'.$medium.'%')
-                    ->orWhere('connected_by', 'like', '%'.$medium.'%');
+        $utmMediums = $this->csvFilterValues($request, 'utm_medium');
+        if ($utmMediums !== []) {
+            $query->where(function (Builder $q) use ($utmMediums) {
+                foreach ($utmMediums as $medium) {
+                    $q->orWhere('campaign', 'like', '%'.$medium.'%')
+                        ->orWhere('connected_by', 'like', '%'.$medium.'%');
+                }
             });
         }
-        if ($request->filled('device')) {
-            // device is not always a DB column — soft-match notes/campaign when present
-            $device = (string) $request->string('device');
-            $query->where(function (Builder $q) use ($device) {
-                $q->where('connected_by', $device)
-                    ->orWhere('campaign', 'like', '%'.$device.'%');
+        $devices = $this->csvFilterValues($request, 'device');
+        if ($devices !== []) {
+            $query->where(function (Builder $q) use ($devices) {
+                $q->whereIn('connected_by', $devices);
+                foreach ($devices as $device) {
+                    $q->orWhere('campaign', 'like', '%'.$device.'%');
+                }
             });
         }
-        if ($request->filled('priority')) {
-            $query->where('priority', $request->string('priority'));
+        $priorities = $this->csvFilterValues($request, 'priority');
+        if ($priorities !== []) {
+            $query->whereIn('priority', $priorities);
         }
-        if ($request->filled('assessment_status')) {
-            // assessment status lives in related activity/qualification fields when present
-            $assessment = (string) $request->string('assessment_status');
-            $query->where(function (Builder $q) use ($assessment) {
-                $q->where('status', $assessment)
-                    ->orWhereHas('stage', fn ($sq) => $sq->where('label', $assessment));
+        $assessments = $this->csvFilterValues($request, 'assessment_status');
+        if ($assessments !== []) {
+            $query->where(function (Builder $q) use ($assessments) {
+                $q->whereIn('status', $assessments)
+                    ->orWhereHas('stage', fn ($sq) => $sq->whereIn('label', $assessments));
             });
         }
         if ($request->filled('created_from')) {
@@ -302,8 +313,9 @@ class LeadController extends Controller
         if ($request->filled('assigned_dept')) {
             $query->where('assigned_dept', $request->string('assigned_dept'));
         }
-        if ($request->filled('source_group')) {
-            $query->where('source_group', $request->string('source_group'));
+        $sourceGroups = $this->csvFilterValues($request, 'source_group');
+        if ($sourceGroups !== []) {
+            $query->whereIn('source_group', $sourceGroups);
         }
         $platform = $request->input('platform', 'All');
         if ($platform !== 'All' && is_string($platform) && $platform !== '') {
@@ -323,20 +335,24 @@ class LeadController extends Controller
                 }
             });
         }
-        $subBrand = $request->input('sub_brand', 'All');
-        if ($subBrand !== 'All' && is_string($subBrand) && $subBrand !== '') {
-            $query->where(function (Builder $q) use ($subBrand) {
-                $q->whereHas('owner', fn (Builder $oq) => $oq->where('sub_brand', $subBrand))
-                    ->orWhereHas('generatedBy', fn (Builder $gq) => $gq->where('sub_brand', $subBrand));
+        $subBrands = $this->csvFilterValues($request, 'sub_brand');
+        $subBrands = array_values(array_filter(
+            $subBrands,
+            static fn ($v) => strcasecmp($v, 'All') !== 0
+        ));
+        if ($subBrands !== []) {
+            $query->where(function (Builder $q) use ($subBrands) {
+                $q->whereHas('owner', fn (Builder $oq) => $oq->whereIn('sub_brand', $subBrands))
+                    ->orWhereHas('generatedBy', fn (Builder $gq) => $gq->whereIn('sub_brand', $subBrands));
             });
         }
-        if ($request->filled('country')) {
-            $location = (string) $request->string('country');
-            $query->where(function (Builder $q) use ($location) {
-                $q->where('country', $location)
-                    ->orWhere('state', $location)
-                    ->orWhere('district', $location)
-                    ->orWhere('city', $location);
+        $countries = $this->csvFilterValues($request, 'country');
+        if ($countries !== []) {
+            $query->where(function (Builder $q) use ($countries) {
+                $q->whereIn('country', $countries)
+                    ->orWhereIn('state', $countries)
+                    ->orWhereIn('district', $countries)
+                    ->orWhereIn('city', $countries);
             });
         }
         if ($request->filled('created_by')) {
@@ -367,9 +383,13 @@ class LeadController extends Controller
         if ($statusLabels !== []) {
             $this->applyLeadStatusFilter($query, $statusLabels);
         }
-        $channel = $request->input('channel', 'All');
-        if ($channel !== 'All' && is_string($channel)) {
-            LeadChannelClassifier::applyChannelFilter($query, $channel);
+        $channels = $this->csvFilterValues($request, 'channel');
+        $channels = array_values(array_filter(
+            $channels,
+            static fn ($v) => strcasecmp($v, 'All') !== 0
+        ));
+        if ($channels !== []) {
+            LeadChannelClassifier::applyChannelFilters($query, $channels);
         }
 
         $smartView = $request->input('smart_view', 'All');
@@ -422,6 +442,32 @@ class LeadController extends Controller
         $perPage = max(1, min(100, $perPage));
 
         return response()->json($query->paginate($perPage));
+    }
+
+    /**
+     * Parse CSV / array query params into a clean string list.
+     *
+     * @return list<string>
+     */
+    private function csvFilterValues(Request $request, string $key): array
+    {
+        if (! $request->filled($key)) {
+            return [];
+        }
+
+        $raw = $request->input($key);
+        $values = [];
+
+        if (is_array($raw)) {
+            $values = $raw;
+        } elseif (is_string($raw) || is_numeric($raw) || is_bool($raw)) {
+            $values = explode(',', (string) $raw);
+        }
+
+        return array_values(array_unique(array_filter(
+            array_map(static fn ($v) => trim((string) $v), $values),
+            static fn ($v) => $v !== ''
+        )));
     }
 
     /**
