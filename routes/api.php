@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\V1\MarketingChallengeController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ProductTargetController;
 use App\Http\Controllers\Api\V1\RoleController;
+use App\Http\Controllers\Api\V1\SalesAnalyticsReportController;
 use App\Http\Controllers\Api\V1\TaskController;
 use App\Http\Controllers\Api\V1\TeamTipController;
 use App\Http\Controllers\Api\V1\TelephonyWebhookController;
@@ -274,6 +275,15 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/analytics/lead-quality', [AnalyticsController::class, 'leadQuality']);
         Route::get('/analytics/role-summary', [AnalyticsController::class, 'roleSummary']);
         Route::get('/analytics/team-insights', [AnalyticsController::class, 'teamInsights']);
+
+        Route::middleware('role:super_admin,sales_head')->group(function (): void {
+            Route::post('/analytics/sales-pivot', [AnalyticsController::class, 'salesPivot']);
+            Route::post('/analytics/sales-pivot/leads', [AnalyticsController::class, 'salesPivotLeads']);
+            Route::get('/analytics/sales-reports', [SalesAnalyticsReportController::class, 'index']);
+            Route::post('/analytics/sales-reports', [SalesAnalyticsReportController::class, 'store']);
+            Route::patch('/analytics/sales-reports/{salesAnalyticsReport}', [SalesAnalyticsReportController::class, 'update']);
+            Route::delete('/analytics/sales-reports/{salesAnalyticsReport}', [SalesAnalyticsReportController::class, 'destroy']);
+        });
 
         Route::middleware('role:super_admin,admin,sales_head,team_lead,psa,advisor')->group(function (): void {
             Route::apiResource('enrollments', EnrollmentController::class);

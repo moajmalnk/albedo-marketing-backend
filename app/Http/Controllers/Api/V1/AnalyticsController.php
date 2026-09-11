@@ -8,6 +8,7 @@ use App\Models\LeadActivity;
 use App\Models\Task;
 use App\Services\MarketingAnalyticsService;
 use App\Services\RoleDashboardAnalyticsService;
+use App\Services\SalesPivotAnalyticsService;
 use App\Services\TeamInsightsAnalyticsService;
 use Illuminate\Http\Request;
 
@@ -56,6 +57,49 @@ class AnalyticsController extends Controller
         $this->assertTeamInsightsRole($request);
 
         return response()->json($teamInsightsAnalyticsService->summarize($request));
+    }
+
+    public function salesPivot(Request $request, SalesPivotAnalyticsService $salesPivotAnalyticsService)
+    {
+        $request->user()?->loadMissing('role');
+        $this->assertSalesPivotRole($request);
+
+        $validated = $request->validate([
+            'rows' => ['nullable', 'array', 'max:5'],
+            'rows.*' => ['string'],
+            'columns' => ['nullable', 'array', 'max:1'],
+            'columns.*' => ['string'],
+            'values' => ['nullable', 'array', 'max:25'],
+            'values.*.field' => ['required_with:values', 'string'],
+            'values.*.aggregation' => ['nullable', 'string', 'in:count,sum,avg'],
+            'filters' => ['nullable', 'array'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:500'],
+        ]);
+
+        return response()->json($salesPivotAnalyticsService->pivot($validated));
+    }
+
+    public function salesPivotLeads(Request $request, SalesPivotAnalyticsService $salesPivotAnalyticsService)
+    {
+        $request->user()?->loadMissing('role');
+        $this->assertSalesPivotRole($request);
+
+        $validated = $request->validate([
+            'rows' => ['nullable', 'array', 'max:5'],
+            'rows.*' => ['string'],
+            'columns' => ['nullable', 'array', 'max:1'],
+            'columns.*' => ['string'],
+            'row_values' => ['nullable', 'array', 'max:5'],
+            'row_values.*' => ['nullable', 'string'],
+            'column_value' => ['nullable', 'string'],
+            'filters' => ['nullable', 'array'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'q' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        return response()->json($salesPivotAnalyticsService->drillDownLeads($validated));
     }
 
     public function leadQuality(Request $request)
@@ -164,6 +208,14 @@ class AnalyticsController extends Controller
         $key = $request->user()?->role?->key;
         if (! in_array($key, ['super_admin', 'admin'], true)) {
             abort(403);
+        }
+    }
+
+    private function assertSalesPivotRole(Request $request): void
+    {
+        $key = $request->user()?->role?->key;
+        if (! in_array($key, ['super_admin', 'sales_head'], true)) {
+            abort(403, 'Only Super Admin and Sales Head can access sales pipeline reports.');
         }
     }
 
