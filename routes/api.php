@@ -82,11 +82,9 @@ Route::prefix('v1')->group(function (): void {
         Route::delete('lead-closed-reasons/{leadClosedReason}', [\App\Http\Controllers\Api\V1\LeadClosedReasonController::class, 'destroy']);
 
         Route::get('lead-filter-sets', [\App\Http\Controllers\Api\V1\LeadFilterSetController::class, 'index']);
-        Route::middleware('role:super_admin,admin')->group(function (): void {
-            Route::post('lead-filter-sets', [\App\Http\Controllers\Api\V1\LeadFilterSetController::class, 'store']);
-            Route::patch('lead-filter-sets/{leadFilterSet}', [\App\Http\Controllers\Api\V1\LeadFilterSetController::class, 'update']);
-            Route::delete('lead-filter-sets/{leadFilterSet}', [\App\Http\Controllers\Api\V1\LeadFilterSetController::class, 'destroy']);
-        });
+        Route::post('lead-filter-sets', [\App\Http\Controllers\Api\V1\LeadFilterSetController::class, 'store']);
+        Route::patch('lead-filter-sets/{leadFilterSet}', [\App\Http\Controllers\Api\V1\LeadFilterSetController::class, 'update']);
+        Route::delete('lead-filter-sets/{leadFilterSet}', [\App\Http\Controllers\Api\V1\LeadFilterSetController::class, 'destroy']);
 
         // Lead Recycling
         Route::get('leads/recycle', [\App\Http\Controllers\Api\V1\LeadRecycleController::class, 'index']);

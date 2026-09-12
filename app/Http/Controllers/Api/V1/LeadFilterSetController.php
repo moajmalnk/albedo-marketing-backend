@@ -8,11 +8,14 @@ use Illuminate\Http\Request;
 
 class LeadFilterSetController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $userId = $request->user()?->id;
+
         return response()->json(
             LeadFilterSet::query()
                 ->where('is_active', true)
+                ->where('created_by', $userId)
                 ->orderBy('sort_order')
                 ->orderBy('name')
                 ->get()
@@ -23,9 +26,13 @@ class LeadFilterSetController extends Controller
     {
         $validated = $this->validatePayload($request);
 
-        $maxOrder = LeadFilterSet::max('sort_order') ?? 0;
+        $userId = $request->user()?->id;
+        $maxOrder = LeadFilterSet::query()
+            ->where('created_by', $userId)
+            ->max('sort_order') ?? 0;
+
         $validated['sort_order'] = $maxOrder + 1;
-        $validated['created_by'] = $request->user()?->id;
+        $validated['created_by'] = $userId;
         $validated['is_active'] = true;
 
         $filterSet = LeadFilterSet::create($validated);
@@ -35,17 +42,34 @@ class LeadFilterSetController extends Controller
 
     public function update(Request $request, LeadFilterSet $leadFilterSet)
     {
+        if ($response = $this->ensureOwner($request, $leadFilterSet)) {
+            return $response;
+        }
+
         $validated = $this->validatePayload($request, partial: true);
         $leadFilterSet->update($validated);
 
         return response()->json($leadFilterSet->fresh());
     }
 
-    public function destroy(LeadFilterSet $leadFilterSet)
+    public function destroy(Request $request, LeadFilterSet $leadFilterSet)
     {
+        if ($response = $this->ensureOwner($request, $leadFilterSet)) {
+            return $response;
+        }
+
         $leadFilterSet->update(['is_active' => false]);
 
         return response()->json(['message' => 'Filter set deactivated']);
+    }
+
+    private function ensureOwner(Request $request, LeadFilterSet $leadFilterSet)
+    {
+        if ((int) $leadFilterSet->created_by !== (int) $request->user()?->id) {
+            return response()->json(['message' => 'You can only manage your own saved filters.'], 403);
+        }
+
+        return null;
     }
 
     private function validatePayload(Request $request, bool $partial = false): array
