@@ -181,6 +181,8 @@ Route::prefix('v1')->group(function (): void {
             Route::middleware('active.checkin')->group(function (): void {
                 Route::get('/leads/kpis', [LeadController::class, 'kpis']);
                 Route::get('/leads', [LeadController::class, 'index']);
+                Route::get('/leads/export/csv', [LeadController::class, 'exportCsv']);
+                Route::get('/leads/export', [LeadController::class, 'exportCsv']);
                 Route::get('/leads/{lead}', [LeadController::class, 'show']);
                 Route::get('/lead-form-options', [LeadFormOptionController::class, 'index']);
                 Route::post('/lead-form-options', [LeadFormOptionController::class, 'store']);

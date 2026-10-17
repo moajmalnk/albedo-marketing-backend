@@ -142,6 +142,103 @@ class LeadController extends Controller
 
     public function index(Request $request)
     {
+        $query = $this->buildLeadsQuery($request);
+
+        $perPage = (int) $request->input('limit', 20);
+        $perPage = max(1, min(100, $perPage));
+
+        return response()->json($query->paginate($perPage));
+    }
+
+    public function exportCsv(Request $request)
+    {
+        $query = $this->buildLeadsQuery($request);
+
+        $callback = function () use ($query) {
+            $file = fopen('php://output', 'w');
+            // UTF-8 BOM so spreadsheet apps (Excel, etc.) display characters properly
+            fputs($file, "\xEF\xBB\xBF");
+
+            fputcsv($file, [
+                'Lead ID',
+                'Date',
+                'Student Name',
+                'Phone',
+                'WhatsApp',
+                'Email',
+                'Class',
+                'Syllabus',
+                'School',
+                'Lead Source',
+                'Platform',
+                'Form Source',
+                'District',
+                'State',
+                'Country',
+                'Status',
+                'Note',
+                'Assigned To',
+                'Department',
+                'Sub-brand',
+                'Device',
+            ], ',', '"', "\\");
+
+            $query->chunk(200, function ($leads) use ($file) {
+                foreach ($leads as $lead) {
+                    $assignedName = $lead->owner 
+                        ? trim($lead->owner->first_name . ' ' . ($lead->owner->last_name ?? ''))
+                        : ($lead->psaOwner 
+                            ? trim($lead->psaOwner->first_name . ' ' . ($lead->psaOwner->last_name ?? ''))
+                            : ($lead->advisorOwner 
+                                ? trim($lead->advisorOwner->first_name . ' ' . ($lead->advisorOwner->last_name ?? ''))
+                                : ''));
+
+                    $dept = $lead->owner?->department 
+                        ?: ($lead->source_group === 'influence' ? 'IM' : ($lead->source_group === 'performance' ? 'PM' : ($lead->assigned_dept ?: '')));
+
+                    $status = $lead->stage?->label ?: ($lead->status ?: 'New Lead');
+
+                    fputcsv($file, [
+                        'LEAD-' . $lead->id,
+                        $lead->created_at ? $lead->created_at->format('Y-m-d') : ($lead->enquiry_at ? date('Y-m-d', strtotime($lead->enquiry_at)) : ''),
+                        $lead->student_name ?: ($lead->phone ?: 'Unnamed lead'),
+                        $lead->phone ?: '',
+                        $lead->whatsapp ?: ($lead->phone ?: ''),
+                        $lead->email ?: '',
+                        $lead->class ?: ($lead->course ?: ''),
+                        $lead->syllabus ?: '',
+                        $lead->school ?: '',
+                        $lead->source_code ?: '',
+                        $lead->source_group ?: '',
+                        $lead->campaign ?: '',
+                        $lead->district ?: ($lead->city ?: ''),
+                        $lead->state ?: '',
+                        $lead->country ?: '',
+                        $status,
+                        strip_tags($lead->notes_html ?: ''),
+                        $assignedName ?: 'Unassigned',
+                        $dept,
+                        $lead->owner?->sub_brand ?: 'albedoedu',
+                        $lead->connected_by ?: 'Desktop',
+                    ], ',', '"', "\\");
+                }
+            });
+
+            fclose($file);
+        };
+
+        $filename = 'albedoedu_leads_' . date('Y-m-d') . '.csv';
+
+        return response()->streamDownload($callback, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+        ]);
+    }
+
+    protected function buildLeadsQuery(Request $request): Builder
+    {
         $request->validate([
             'created_from' => ['nullable', 'date'],
             'created_to' => ['nullable', 'date'],
@@ -176,18 +273,27 @@ class LeadController extends Controller
             'priority' => ['nullable', 'string', 'max:40'],
             'assessment_status' => ['nullable', 'string', 'max:80'],
             'assigned_only' => ['nullable', 'boolean'],
+            'ids' => ['nullable'],
         ]);
 
         $query = Lead::query()->with([
             'stage',
             'closedReason',
             'closedBy:id,first_name,last_name,email',
-            'owner:id,first_name,last_name,email,role_id,department',
+            'owner:id,first_name,last_name,email,role_id,department,sub_brand',
             'owner.role:id,key,name',
             'telecallerOwner:id,first_name,last_name,email,role_id',
             'psaOwner:id,first_name,last_name,email,role_id',
             'advisorOwner:id,first_name,last_name,email,role_id',
         ]);
+
+        if ($request->filled('ids')) {
+            $ids = is_array($request->input('ids')) ? $request->input('ids') : explode(',', (string) $request->input('ids'));
+            $ids = array_values(array_filter(array_map('intval', $ids)));
+            if (!empty($ids)) {
+                $query->whereIn('id', $ids);
+            }
+        }
 
         if ($request->boolean('trashed')) {
             $user = $request->user();
@@ -398,7 +504,7 @@ class LeadController extends Controller
         } elseif ($smartView === 'assigned') {
             // All leads that have an owner (management "Assigned" tab)
             $query->whereNotNull('owner_id');
-        } elseif ($smartView === 'my_assigned' && $user) {
+        } elseif ($smartView === 'my_assigned' && $user = $request->user()) {
             $query->where('owner_id', $user->id);
         } elseif ($smartView === 'qualified') {
             $query->whereHas('stage', fn($q) => $q->where('key', 'qualified_for_sales'));
@@ -438,10 +544,7 @@ class LeadController extends Controller
             $query->latest('id');
         }
 
-        $perPage = (int) $request->input('limit', 20);
-        $perPage = max(1, min(100, $perPage));
-
-        return response()->json($query->paginate($perPage));
+        return $query;
     }
 
     /**
