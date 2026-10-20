@@ -21,7 +21,7 @@ class Lead extends Model
         'whatsapp_id', 'email', 'children_count', 'already_enrolled', 'parent_name',
         'parent_relation', 'class', 'syllabus', 'course', 'subjects', 'school',
         'course_interested', 'qualification', 'preferred_campus',
-        'city', 'district', 'state', 'country', 'pincode', 'source_group', 'source_code',
+        'city', 'district', 'state', 'country', 'pincode', 'lead_source', 'source_group', 'source_code',
         'campaign', 'connected_by', 'enquiry_at', 'stage_id', 'closed_reason_id', 'closed_by', 'closed_at', 'status',
         'owner_id', 'captured_by_user_id', 'assigned_dept', 'is_read_only', 'priority',
         'dnd', 'next_action_at', 'last_contacted_at', 'created_by', 'generated_by_user_id', 'deleted_by', 'updated_by',

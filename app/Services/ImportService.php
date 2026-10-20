@@ -191,13 +191,15 @@ class ImportService
             try {
                 $mapped = $this->mapRow($row, $mapping);
                 
-                // Auto-normalize source_group to fit the ENUM constraint
+                // Auto-normalize source_group to fit constraint
                 if (!empty($mapped['source_group'])) {
                     $sg = strtolower(trim((string)$mapped['source_group']));
                     if (str_contains($sg, 'performance')) $mapped['source_group'] = 'performance';
                     elseif (str_contains($sg, 'influence')) $mapped['source_group'] = 'influence';
                     elseif (str_contains($sg, 'albedo')) $mapped['source_group'] = 'albedo';
                     elseif (str_contains($sg, 'reference')) $mapped['source_group'] = 'reference';
+                    elseif (str_contains($sg, 'offline')) $mapped['source_group'] = 'offline';
+                    elseif (str_contains($sg, 'tele')) $mapped['source_group'] = 'tele';
                     else $mapped['source_group'] = 'other';
                 }
                 

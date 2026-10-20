@@ -34,8 +34,8 @@ class ValidationService
         }
 
         $sourceGroup = $row['source_group'] ?? null;
-        if (!empty($sourceGroup) && !in_array(strtolower(trim((string)$sourceGroup)), ['influence', 'performance', 'albedo', 'reference', 'other'], true)) {
-            $errors['source_group'] = 'Invalid source_group. Allowed: influence, performance, albedo, reference, other.';
+        if (!empty($sourceGroup) && !in_array(strtolower(trim((string)$sourceGroup)), ['influence', 'performance', 'albedo', 'reference', 'offline', 'tele', 'other'], true)) {
+            $errors['source_group'] = 'Invalid source_group. Allowed: influence, performance, albedo, reference, offline, tele, other.';
         }
 
         return $errors;

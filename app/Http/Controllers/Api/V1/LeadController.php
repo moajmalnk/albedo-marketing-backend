@@ -253,8 +253,8 @@ class LeadController extends Controller
             'smart_view' => ['nullable', 'string', 'max:50'],
             'channel' => ['nullable', 'string', 'max:50'],
             'platform' => ['nullable', 'string', 'max:50'],
-            'sub_brand' => ['nullable', 'string', 'max:80'],
-            'source_group' => ['nullable', 'string', Rule::in(['influence', 'performance', 'albedo', 'reference', 'other'])],
+            'lead_source' => ['nullable', 'string', 'max:100'],
+            'source_group' => ['nullable', 'string', 'max:64'],
             'month' => ['nullable', 'string'],
             'year' => ['nullable', 'string'],
             'q' => ['nullable', 'string', 'max:120'],
@@ -418,6 +418,9 @@ class LeadController extends Controller
         }
         if ($request->filled('assigned_dept')) {
             $query->where('assigned_dept', $request->string('assigned_dept'));
+        }
+        if ($request->filled('lead_source')) {
+            $query->where('lead_source', $request->string('lead_source'));
         }
         $sourceGroups = $this->csvFilterValues($request, 'source_group');
         if ($sourceGroups !== []) {
@@ -641,9 +644,9 @@ class LeadController extends Controller
             'district' => ['nullable', 'string', 'max:80'],
             'state' => ['nullable', 'string', 'max:80'],
             'country' => ['nullable', 'string', 'max:80'],
-            'pincode' => ['nullable', 'string', 'max:12'],
-            'source_group' => ['nullable', 'string', Rule::in(['influence', 'performance', 'albedo', 'reference', 'other'])],
-            'source_code' => ['nullable', 'string', 'max:40'],
+            'lead_source' => ['nullable', 'string', 'max:100'],
+            'source_group' => ['nullable', 'string', 'max:64'],
+            'source_code' => ['nullable', 'string', 'max:100'],
             'campaign' => ['nullable', 'string', 'max:120'],
             'campaign_id' => ['nullable', 'integer', 'exists:campaigns,id'],
             'connected_by' => ['nullable', 'string', 'max:64'],
@@ -661,6 +664,25 @@ class LeadController extends Controller
         foreach ($data as $key => $value) {
             if ($value === '' && ! in_array($key, ['student_name', 'phone'], true)) {
                 unset($data[$key]);
+            }
+        }
+
+        if (empty($data['source_group']) && ! empty($data['lead_source'])) {
+            $ls = strtolower(trim((string) $data['lead_source']));
+            if (str_contains($ls, 'influence')) {
+                $data['source_group'] = 'influence';
+            } elseif (str_contains($ls, 'performance')) {
+                $data['source_group'] = 'performance';
+            } elseif (str_contains($ls, 'albedo')) {
+                $data['source_group'] = 'albedo';
+            } elseif (str_contains($ls, 'reference')) {
+                $data['source_group'] = 'reference';
+            } elseif (str_contains($ls, 'offline')) {
+                $data['source_group'] = 'offline';
+            } elseif (str_contains($ls, 'tele')) {
+                $data['source_group'] = 'tele';
+            } else {
+                $data['source_group'] = 'other';
             }
         }
 
