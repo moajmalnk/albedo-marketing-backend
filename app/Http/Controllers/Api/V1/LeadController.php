@@ -262,9 +262,12 @@ class LeadController extends Controller
             'psa_owner_id' => ['nullable', 'integer'],
             'advisor_owner_id' => ['nullable', 'integer'],
             'source_codes' => ['nullable', 'string', 'max:500'],
-            'course' => ['nullable', 'string', 'max:120'],
-            'syllabus' => ['nullable', 'string', 'max:80'],
-            'class' => ['nullable', 'string', 'max:40'],
+            'source_code' => ['nullable', 'string', 'max:500'],
+            'course' => ['nullable', 'string', 'max:500'],
+            'syllabus' => ['nullable', 'string', 'max:500'],
+            'subjects' => ['nullable', 'string', 'max:500'],
+            'subject' => ['nullable', 'string', 'max:500'],
+            'class' => ['nullable', 'string', 'max:500'],
             'state' => ['nullable', 'string', 'max:80'],
             'district' => ['nullable', 'string', 'max:80'],
             'campaign' => ['nullable', 'string', 'max:120'],
@@ -362,6 +365,19 @@ class LeadController extends Controller
         if ($classes !== []) {
             $query->whereIn('class', $classes);
         }
+        $subjects = $this->csvFilterValues($request, 'subjects');
+        if ($subjects === []) {
+            $subjects = $this->csvFilterValues($request, 'subject');
+        }
+        if ($subjects !== []) {
+            $query->where(function (Builder $q) use ($subjects) {
+                foreach ($subjects as $subj) {
+                    $q->orWhereJsonContains('subjects', $subj)
+                        ->orWhere('subjects', 'like', '%"' . $subj . '"%')
+                        ->orWhere('subjects', 'like', '%' . $subj . '%');
+                }
+            });
+        }
         $states = $this->csvFilterValues($request, 'state');
         if ($states !== []) {
             $query->whereIn('state', $states);
@@ -419,12 +435,19 @@ class LeadController extends Controller
         if ($request->filled('assigned_dept')) {
             $query->where('assigned_dept', $request->string('assigned_dept'));
         }
-        if ($request->filled('lead_source')) {
-            $query->where('lead_source', $request->string('lead_source'));
+        $leadSources = $this->csvFilterValues($request, 'lead_source');
+        if ($leadSources !== []) {
+            $query->where(function (Builder $q) use ($leadSources) {
+                $q->whereIn('lead_source', $leadSources)
+                    ->orWhereIn('source_group', $leadSources);
+            });
         }
         $sourceGroups = $this->csvFilterValues($request, 'source_group');
         if ($sourceGroups !== []) {
-            $query->whereIn('source_group', $sourceGroups);
+            $query->where(function (Builder $q) use ($sourceGroups) {
+                $q->whereIn('source_group', $sourceGroups)
+                    ->orWhereIn('lead_source', $sourceGroups);
+            });
         }
         $platform = $request->input('platform', 'All');
         if ($platform !== 'All' && is_string($platform) && $platform !== '') {
@@ -635,10 +658,10 @@ class LeadController extends Controller
             'parent_name' => ['nullable', 'string', 'max:160'],
             'parent_relation' => ['nullable', 'string', Rule::in(['father', 'mother', 'guardian'])],
             'class' => ['nullable', 'string', 'max:20'],
-            'syllabus' => $this->picklistValueRules('syllabus'),
-            'course' => $this->picklistValueRules('course'),
+            'syllabus' => ['nullable', 'string', 'max:191'],
+            'course' => ['nullable', 'string', 'max:191'],
             'subjects' => ['nullable', 'array'],
-            'subjects.*' => $this->picklistArrayItemRules('subject', 120),
+            'subjects.*' => ['string', 'max:120'],
             'school' => ['nullable', 'string', 'max:160'],
             'city' => ['nullable', 'string', 'max:80'],
             'district' => ['nullable', 'string', 'max:80'],
